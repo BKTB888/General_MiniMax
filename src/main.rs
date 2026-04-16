@@ -29,5 +29,5 @@ fn main() {
     let game = Game::<Rules>::new(boxed![
         randy, randy
     ]);
-    game.print_play();
+    game.print_stats(1_000_000);
 }

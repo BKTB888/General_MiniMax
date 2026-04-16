@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use colored::{Color, ColoredString, Colorize};
 
-#[derive(Ord, Eq, PartialEq, PartialOrd, Debug)]
+#[derive(Ord, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub enum GameResult {
     Player(u8),
     Draw
