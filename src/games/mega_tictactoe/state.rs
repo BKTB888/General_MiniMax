@@ -1,18 +1,20 @@
-use std::collections::{BTreeMap, HashSet};
-use crate::games::mega_tictactoe::coordinate::{Coordinate, MapInt};
-use crate::result::{get_player_color, GameResult};
+use crate::games::coordinate::Coordinate;
+use crate::result::{GameResult, get_player_color};
 use crate::state::GameState;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use colored::Colorize;
-use crate::players::Player;
+use std::collections::{BTreeMap, HashSet};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
-type Map = BTreeMap<Coordinate, u8>;
+pub type MapInt = i16;
+pub type MapCoord = Coordinate<MapInt, MapInt>;
+type Map = BTreeMap<MapCoord, u8>;
 
 #[derive(Clone)]
 pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
     cells: Map,
     player: u8,
-    candidate_moves: HashSet<Coordinate>,
+    candidate_moves: HashSet<MapCoord>,
+    result: Option<GameResult>,
 }
 
 impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
@@ -21,14 +23,15 @@ impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
             cells: Map::new(),
             player: 0,
             candidate_moves: HashSet::from([(0, 0).into()]),
+            result: None,
         }
     }
 }
 
-impl<const K: u8, const NUM_P: u8> From<Vec<Coordinate>> for KInARowState<K, NUM_P> {
-    fn from(coords: Vec<Coordinate>) -> Self {
+impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P> {
+    fn from(coords: Vec<MapCoord>) -> Self {
         let mut result = Self::default();
-        coords.into_iter().for_each( |coord| {
+        coords.into_iter().for_each(|coord| {
             result.make_move(coord);
         });
 
@@ -37,19 +40,27 @@ impl<const K: u8, const NUM_P: u8> From<Vec<Coordinate>> for KInARowState<K, NUM
 }
 
 impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
-    type Choice = Coordinate;
+    type Choice = MapCoord;
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, coord: Self::Choice) {
-        self.cells.insert(coord.into(), self.player);
-        self.player = (self.player + 1) % NUM_P;
-        self.candidate_moves.remove(&coord);
+        if self.result.is_none() {
+            self.cells.insert(coord.into(), self.player);
+            //self.result = Self::has_n_from((coord, self.player), K, &mut self.cells);
 
-        self.add_candidates(coord);
+            self.player = (self.player + 1) % NUM_P;
+            self.candidate_moves.remove(&coord);
+
+            self.add_candidates(coord);
+        } else {
+            panic!(
+                "Game is over, but player {} tried to make a move {coord}.",
+                self.player
+            );
+        }
     }
 
     //If none, there is no result
-    //Todo: make this more efficient
     fn get_result(&self) -> Option<GameResult> {
         let mut not_visited = self.cells.clone();
         while let Some(first) = not_visited.pop_first() {
@@ -78,19 +89,16 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
         &self.cells
     }
 
-    fn has_n_from((start, player): (Coordinate, u8), n: u8, cells: &mut Map) -> bool {
-        const DIRS: [(MapInt, MapInt); 4] = [
-            (1, 0),
-            (0, 1),
-            (1, 1),
-            (1, -1),
-        ];
+    fn has_n_from((start, player): (MapCoord, u8), n: u8, cells: &mut Map) -> bool {
+        const DIRS: [(MapInt, MapInt); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
 
         //Check ↑ → ↗ ↖
         for dir in DIRS {
             let mut coord = start + dir;
             let mut k = 1;
-            while let Some(&cell) = cells.get(&coord) && cell == player {
+            while let Some(&cell) = cells.get(&coord)
+                && cell == player
+            {
                 k += 1;
                 coord += dir;
 
@@ -103,13 +111,12 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
     }
 
     //Todo: make this more efficient
-    pub fn player_has_n(&self, player: u8, n: u8) -> bool{
-        let mut not_visited =
-            self.cells.iter()
-                .filter_map(|(&coord, &p)|
-                    if p == player { Some((coord, p)) } else { None }
-                )
-                .collect::<BTreeMap<_, _>>();
+    pub fn player_has_n(&self, player: u8, n: u8) -> bool {
+        let mut not_visited = self
+            .cells
+            .iter()
+            .filter_map(|(&coord, &p)| if p == player { Some((coord, p)) } else { None })
+            .collect::<BTreeMap<_, _>>();
 
         while let Some(first) = not_visited.pop_first() {
             if Self::has_n_from(first, n, &mut not_visited) {
@@ -118,33 +125,74 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
         }
         false
     }
+    pub fn has_won_from(&self, from: MapCoord) -> bool {
+        const DIRS: [(MapInt, MapInt); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
 
-    fn add_candidates(&mut self, from: Coordinate) {
-        const R: MapInt = 1;
-        const NEIGHBOURS: [Coordinate; ((2 * R + 1).pow(2) - 1) as usize] = neighbour_offsets!(R);
+        //Check ↑ → ↗ ↖
+        for dir in DIRS {
+            let mut coord = from + dir;
+            let mut k = 0;
+            while let Some(&cell) = self.cells.get(&coord)
+                && cell == self.player
+            {
+                k += 1;
+                coord += dir;
 
-        self.candidate_moves.extend(
-            NEIGHBOURS.iter()
-                .map(|&coord| coord + from)
-                .filter(|coord| !self.cells.contains_key(coord))
-        );
-
-        //eprintln!("{}", self.candidate_moves.len());
+                if k >= K {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
+    pub fn check_result(&self) -> Option<GameResult> {
+        todo!()
+    }
 
+    fn add_candidates(&mut self, from: MapCoord) {
+        const R: MapInt = 1;
+        const NEIGHBOURS: [MapCoord; ((2 * R + 1).pow(2) - 1) as usize] = neighbour_offsets!(R);
+
+        self.candidate_moves.extend(
+            NEIGHBOURS
+                .iter()
+                .map(|&coord| coord + from)
+                .filter(|coord| !self.cells.contains_key(coord)),
+        );
+    }
 }
 impl<const K: u8, const NUM_P: u8> Display for KInARowState<K, NUM_P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let max_r = self.cells.keys().map(|Coordinate(r, _)| *r).max().unwrap_or_default();
-        let max_c = self.cells.keys().map(|Coordinate(_, c)| *c).max().unwrap_or_default();
-        let min_r = self.cells.keys().map(|Coordinate(r, _)| *r).min().unwrap_or_default();
-        let min_c = self.cells.keys().map(|Coordinate(_, c)| *c).min().unwrap_or_default();
+        let max_r = self
+            .cells
+            .keys()
+            .map(|Coordinate(r, _)| *r)
+            .max()
+            .unwrap_or_default();
+        let max_c = self
+            .cells
+            .keys()
+            .map(|Coordinate(_, c)| *c)
+            .max()
+            .unwrap_or_default();
+        let min_r = self
+            .cells
+            .keys()
+            .map(|Coordinate(r, _)| *r)
+            .min()
+            .unwrap_or_default();
+        let min_c = self
+            .cells
+            .keys()
+            .map(|Coordinate(_, c)| *c)
+            .min()
+            .unwrap_or_default();
 
         let bx = 2;
         // Build board rows
-        for row in (min_r-bx..=max_r+bx).rev() {
-            for col in min_c-bx..=max_c+bx {
+        for row in (min_r - bx..=max_r + bx).rev() {
+            for col in min_c - bx..=max_c + bx {
                 let coord = Coordinate(row, col);
                 if let Some(&player) = self.cells.get(&coord) {
                     // Choose a color for the player
@@ -154,7 +202,8 @@ impl<const K: u8, const NUM_P: u8> Display for KInARowState<K, NUM_P> {
                         2 => "△", // Green triangle for player 2
                         3 => "◇", // Magenta diamond for player 3
                         _ => "?", // White ? for any extra player
-                    }.color(get_player_color(player));
+                    }
+                    .color(get_player_color(player));
                     write!(f, "{colored}")?;
                 } else {
                     write!(f, "·")?;
@@ -169,7 +218,7 @@ impl<const K: u8, const NUM_P: u8> Display for KInARowState<K, NUM_P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::games::mega_tictactoe::coordinate::Coordinate as C;
+    use crate::games::coordinate::Coordinate as C;
 
     type KIR3 = KInARowState<3>;
 
@@ -196,36 +245,36 @@ mod tests {
     #[test]
     fn test_has_enough_from_horizontal_win() {
         let mut cells = BTreeMap::new();
-        let first =(C(0, 0), 0);
+        let first = (C(0, 0), 0);
 
         cells.insert(first.0, first.1);
         cells.insert(C(1, 0), 0);
         cells.insert(C(2, 0), 0);
 
-        assert!(KIR3::has_n_from(first, 3,&mut cells));
+        assert!(KIR3::has_n_from(first, 3, &mut cells));
     }
 
     #[test]
     fn test_has_enough_from_vertical_win() {
         let mut cells = BTreeMap::new();
-        let first =(C(0, 0), 1);
+        let first = (C(0, 0), 1);
         cells.insert(first.0, first.1);
         cells.insert(C(0, 1), 1);
         cells.insert(C(0, 2), 1);
 
-        assert!(KIR3::has_n_from(first, 3,&mut cells));
+        assert!(KIR3::has_n_from(first, 3, &mut cells));
     }
 
     #[test]
     fn test_has_enough_from_diagonal_win() {
         let mut cells = BTreeMap::new();
-        let first =(C(0, 0), 0);
+        let first = (C(0, 0), 0);
 
         cells.insert(first.0, first.1);
         cells.insert(C(1, 1), 0);
         cells.insert(C(2, 2), 0);
 
-        assert!(KIR3::has_n_from(first, 3,&mut cells));
+        assert!(KIR3::has_n_from(first, 3, &mut cells));
     }
 
     #[test]
@@ -275,24 +324,22 @@ mod tests {
     }
 }
 
-macro neighbour_offsets {
-    ($r:expr) => {{
-        const R: MapInt = $r;
-        const SIZE: usize = ((2 * R + 1) * (2 * R + 1) - 1) as usize;
-        let mut arr = [Coordinate(0, 0); SIZE];
-        let mut i = 0;
-        let mut a = -R;
-        while a <= R {
-            let mut b = -R;
-            while b <= R {
-                if a != 0 || b != 0 {
-                    arr[i] = Coordinate(a, b);
-                    i += 1;
-                }
-                b += 1;
+macro neighbour_offsets($r:expr) {{
+    const R: MapInt = $r;
+    const SIZE: usize = ((2 * R + 1) * (2 * R + 1) - 1) as usize;
+    let mut arr = [Coordinate(0, 0); SIZE];
+    let mut i = 0;
+    let mut a = -R;
+    while a <= R {
+        let mut b = -R;
+        while b <= R {
+            if a != 0 || b != 0 {
+                arr[i] = Coordinate(a, b);
+                i += 1;
             }
-            a += 1;
+            b += 1;
         }
-        arr
-    }}
-}
+        a += 1;
+    }
+    arr
+}}

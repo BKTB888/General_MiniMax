@@ -1,17 +1,27 @@
-use std::fmt::{Display, Formatter};
-use colored::Colorize;
-use crate::result::{get_player_color, GameResult};
+use crate::result::{GameResult, get_player_color};
 use crate::state::GameState;
+use colored::Colorize;
+use std::cmp::min;
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone)]
-pub struct ConnectKState<const K: u8, const N: u8, const M: u8, const NUM_P: u8> where [(); M as usize]:, [(); N as usize]: {
+pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2>
+where
+    [(); M as usize]:,
+    [(); N as usize]:,
+{
     cells: [[Option<u8>; N as usize]; M as usize],
     player: u8,
     choices: [u8; M as usize],
-    result: Option<GameResult>
+    result: Option<GameResult>,
 }
 
-impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8> Default for ConnectKState<K, N, M, NUM_P> where [(); M as usize]:, [(); N as usize]: {
+impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Default
+    for ConnectKState<N, M, K, NUM_P>
+where
+    [(); M as usize]:,
+    [(); N as usize]:,
+{
     fn default() -> Self {
         Self {
             cells: [[None; N as usize]; M as usize],
@@ -22,7 +32,12 @@ impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8> Default for Connect
     }
 }
 
-impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8>  Display for ConnectKState<K, N, M, NUM_P> where [(); N as usize]:, [(); M as usize]: {
+impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Display
+    for ConnectKState<N, M, K, NUM_P>
+where
+    [(); N as usize]:,
+    [(); M as usize]:,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Top border
         writeln!(f, "┌{}┐", "───┬".repeat(M as usize - 1) + "───")?;
@@ -52,7 +67,9 @@ impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8>  Display for Connec
         write!(f, " ")?;
         for i in 0..M {
             write!(f, " {} ", i.to_string().bright_white().bold())?;
-            if i < M - 1 { write!(f, " ")?; }
+            if i < M - 1 {
+                write!(f, " ")?;
+            }
         }
         writeln!(f)?;
 
@@ -60,7 +77,12 @@ impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8>  Display for Connec
     }
 }
 
-impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8>  GameState for ConnectKState<K, N, M, NUM_P> where [(); M as usize]:, [(); N as usize]:  {
+impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
+    for ConnectKState<N, M, K, NUM_P>
+where
+    [(); M as usize]:,
+    [(); N as usize]:,
+{
     type Choice = u8;
     const NUM_P: u8 = NUM_P;
 
@@ -68,10 +90,15 @@ impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8>  GameState for Conn
         if self.result.is_none() {
             self.cells[choice as usize][self.choices[choice as usize] as usize] = Some(self.player);
             self.choices[choice as usize] += 1;
+
+            self.result = self.check_result(choice as usize);
+
             self.player = (self.player + 1) % NUM_P;
-            self.result = self.check_win();
         } else {
-            panic!("Game is over, but player {} tried to make a move {choice}.", self.player);
+            panic!(
+                "Game is over, but player {} tried to make a move {choice}.",
+                self.player
+            );
         }
     }
 
@@ -94,48 +121,144 @@ impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8>  GameState for Conn
     }
 }
 
-impl<const K: u8, const N: u8, const M: u8, const NUM_P: u8> ConnectKState<K, N, M, NUM_P> where [(); M as usize]:, [(); N as usize]: {
-    fn check_win(&self) -> Option<GameResult> {
-        let last_player = (self.player + NUM_P - 1) % NUM_P;
+impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> ConnectKState<N, M, K, NUM_P>
+where
+    [(); M as usize]:,
+    [(); N as usize]:,
+{
+    fn check_result(&self, col: usize) -> Option<GameResult> {
+        if self.choices.iter().all(|&h| h == N) {
+            return Some(GameResult::Draw);
+        }
 
-        const DIRS: [(i16, i16); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
+        let col_size = self.choices[col];
+        let row = (col_size - 1) as usize;
 
-        for col in 0..M as usize {
-            let row = self.choices[col] as usize;
-            if row == 0 { continue; }
-            let row = row - 1;
+        //Check ↓
+        if col_size >= K
+            // All cells in the col are filled with current player
+            && self.cells[col][(col_size - K) as usize..=row]
+            .iter()
+            .all(|&cell| cell == Some(self.player))
+        {
+            return Some(GameResult::Player(self.player));
+        }
 
-            if self.cells[col][row] != Some(last_player) { continue; }
+        //Count ─
+        let mut in_row = 1;
 
-            for (dc, dr) in DIRS {
-                let mut count = 1u8;
-
-                let (mut c, mut r) = (col as i16 + dc, row as i16 + dr);
-                while c >= 0 && c < M as i16 && r >= 0 && r < N as i16
-                    && self.cells[c as usize][r as usize] == Some(last_player)
-                {
-                    count += 1;
-                    c += dc;
-                    r += dr;
-                }
-
-                let (mut c, mut r) = (col as i16 - dc, row as i16 - dr);
-                while c >= 0 && c < M as i16 && r >= 0 && r < N as i16
-                    && self.cells[c as usize][r as usize] == Some(last_player)
-                {
-                    count += 1;
-                    c -= dc;
-                    r -= dr;
-                }
-
-                if count >= K {
-                    return Some(GameResult::Player(last_player));
-                }
+        //Count cols →
+        let max = min(col as u8 + K, M) as usize;
+        for current_col in self.cells[col..max].iter().skip(1) {
+            if current_col[row] == Some(self.player) {
+                in_row += 1;
+            } else {
+                break;
             }
         }
 
-        if self.choices.iter().all(|&h| h == N) {
-            return Some(GameResult::Draw);
+        if in_row >= K {
+            return Some(GameResult::Player(self.player));
+        }
+
+        //Count cols ←
+        let min = (col as u8).saturating_sub(K) as usize;
+        for current_col in self.cells[min..col].iter().rev() {
+            if current_col[row] == Some(self.player) {
+                in_row += 1;
+            } else {
+                break;
+            }
+        }
+
+        if in_row >= K {
+            return Some(GameResult::Player(self.player));
+        }
+
+        //Count /
+        let mut in_diag = 1;
+
+        //Count ↗
+        loop {
+            if in_diag >= K {
+                return Some(GameResult::Player(self.player));
+            }
+            let col = col + in_diag as usize;
+            let row = row + in_diag as usize;
+
+            if self.cells.get(col).is_some_and(|column| {
+                column
+                    .get(row)
+                    .is_some_and(|&cell| cell == Some(self.player))
+            }) {
+                in_diag += 1;
+            } else {
+                break;
+            }
+        }
+
+        //Count ↙
+        let mut current = 1;
+        loop {
+            if in_diag >= K {
+                return Some(GameResult::Player(self.player));
+            }
+            let col = col.wrapping_sub(current);
+            let row = row.wrapping_sub(current);
+
+            if self.cells.get(col).is_some_and(|column| {
+                column
+                    .get(row)
+                    .is_some_and(|&cell| cell == Some(self.player))
+            }) {
+                in_diag += 1;
+                current += 1;
+            } else {
+                break;
+            }
+        }
+
+        //Count \
+        in_diag = 1;
+
+        //Count ↘
+        loop {
+            if in_diag >= K {
+                return Some(GameResult::Player(self.player));
+            }
+            let col = col.wrapping_sub(in_diag as usize);
+            let row = row + in_diag as usize;
+
+            if self.cells.get(col).is_some_and(|column| {
+                column
+                    .get(row)
+                    .is_some_and(|&cell| cell == Some(self.player))
+            }) {
+                in_diag += 1;
+            } else {
+                break;
+            }
+        }
+
+        //Count ↖
+        current = 1;
+        loop {
+            if in_diag >= K {
+                return Some(GameResult::Player(self.player));
+            }
+            let col = col + current;
+            let row = row.wrapping_sub(current);
+
+            if self.cells.get(col).is_some_and(|column| {
+                column
+                    .get(row)
+                    .is_some_and(|&cell| cell == Some(self.player))
+            }) {
+                in_diag += 1;
+                current += 1;
+            } else {
+                break;
+            }
         }
 
         None
@@ -148,10 +271,10 @@ mod tests {
     use crate::result::GameResult;
     use crate::state::GameState;
 
-    type C4 = ConnectKState<4, 6, 7, 2>; // standard Connect Four
+    type C4 = ConnectKState<6, 7>; // standard Connect Four
 
-    fn make_moves<const K: u8, const N: u8, const M: u8, const NUM_P: u8>(
-        state: &mut ConnectKState<K, N, M, NUM_P>,
+    fn make_moves<const N: u8, const M: u8, const K: u8, const NUM_P: u8>(
+        state: &mut ConnectKState<N, M, K, NUM_P>,
         moves: &[u8],
     ) where
         [(); M as usize]:,
@@ -229,34 +352,43 @@ mod tests {
         let mut state = C4::default();
         // Build staircase so p0 lands on (0,0),(1,1),(2,2),(3,3)
         // p0 plays cols 0,1,2,3 in order; p1 fills beneath
-        make_moves(&mut state, &[
-            0,          // p0 (0,0)
-            1, 1,       // p1 (1,0), p0 (1,1)
-            2, 2, 2,    // p1 (2,0), p0 (2,1) -- wait, interleave needed
-        ]);
+        make_moves(
+            &mut state,
+            &[
+                0, // p0 (0,0)
+                1, 1, // p1 (1,0), p0 (1,1)
+                2, 2, 2, // p1 (2,0), p0 (2,1) -- wait, interleave needed
+            ],
+        );
         // Reset and use a known working sequence
         let mut state = C4::default();
         // sequence that gives p0 an ascending diagonal at rows 0-3
-        make_moves(&mut state, &[
-            1, 2, 2, 3, 3, 3, // build up cols 1,2,3
-            0,                 // p1's turn — col 0, row 0  (p1)
-        ]);
+        make_moves(
+            &mut state,
+            &[
+                1, 2, 2, 3, 3, 3, // build up cols 1,2,3
+                0, // p1's turn — col 0, row 0  (p1)
+            ],
+        );
         // Give p0 the diagonal: cols 0,1,2,3 at rows 0,1,2,3
         // Full correct sequence:
         let mut state = C4::default();
-        make_moves(&mut state, &[
-            0,       // p0 → (0,0)
-            1,       // p1 → (1,0)
-            1,       // p0 → (1,1)
-            2,       // p1 → (2,0)
-            2,       // p0 → (2,1)
-            3,       // p1 → (3,0)
-            2,       // p0 → (2,2)
-            3,       // p1 → (3,1)
-            3,       // p0 → (3,2)
-            6,       // p1 → dummy
-            3,       // p0 → (3,3)  — ascending diagonal complete
-        ]);
+        make_moves(
+            &mut state,
+            &[
+                0, // p0 → (0,0)
+                1, // p1 → (1,0)
+                1, // p0 → (1,1)
+                2, // p1 → (2,0)
+                2, // p0 → (2,1)
+                3, // p1 → (3,0)
+                2, // p0 → (2,2)
+                3, // p1 → (3,1)
+                3, // p0 → (3,2)
+                6, // p1 → dummy
+                3, // p0 → (3,3)  — ascending diagonal complete
+            ],
+        );
         assert_eq!(state.get_result(), Some(GameResult::Player(0)));
     }
 
@@ -264,19 +396,22 @@ mod tests {
     fn test_diagonal_win_descending_player0() {
         let mut state = C4::default();
         // p0 lands on (3,0),(2,1),(1,2),(0,3) — descending diagonal
-        make_moves(&mut state, &[
-            3,       // p0 → (3,0)
-            2,       // p1 → (2,0)
-            2,       // p0 → (2,1)
-            1,       // p1 → (1,0)
-            1,       // p0 → (1,1)
-            0,       // p1 → (0,0)
-            1,       // p0 → (1,2)
-            0,       // p1 → (0,1)
-            0,       // p0 → (0,2)
-            6,       // p1 → dummy
-            0,       // p0 → (0,3) — descending diagonal complete
-        ]);
+        make_moves(
+            &mut state,
+            &[
+                3, // p0 → (3,0)
+                2, // p1 → (2,0)
+                2, // p0 → (2,1)
+                1, // p1 → (1,0)
+                1, // p0 → (1,1)
+                0, // p1 → (0,0)
+                1, // p0 → (1,2)
+                0, // p1 → (0,1)
+                0, // p0 → (0,2)
+                6, // p1 → dummy
+                0, // p0 → (0,3) — descending diagonal complete
+            ],
+        );
         assert_eq!(state.get_result(), Some(GameResult::Player(0)));
     }
 
@@ -285,7 +420,7 @@ mod tests {
     #[test]
     fn test_draw() {
         // Use a tiny board: Connect-5 on 3×3 with 2 players (unreachable win → force full board)
-        type TinyNoWin = ConnectKState<5, 3, 3, 2>;
+        type TinyNoWin = ConnectKState<5, 3, 3>;
         let mut state = TinyNoWin::default();
         // Fill all 9 cells in an order that never produces 5 in a row (impossible on 3×3)
         for col in [0u8, 1, 2, 0, 1, 2, 0, 1, 2] {
@@ -313,11 +448,14 @@ mod tests {
         type C3P = ConnectKState<3, 6, 7, 3>;
         let mut state = C3P::default();
         // turn order: p0, p1, p2, p0, p1, p2, p0, p1, p2
-        make_moves(&mut state, &[
-            6, 5, 0,  // p0→6, p1→5, p2→(0,0)
-            6, 5, 0,  // p0→6, p1→5, p2→(0,1)
-            6         // p0 wins
-        ]);
+        make_moves(
+            &mut state,
+            &[
+                6, 5, 0, // p0→6, p1→5, p2→(0,0)
+                6, 5, 0, // p0→6, p1→5, p2→(0,1)
+                6, // p0 wins
+            ],
+        );
         assert_eq!(state.get_result(), Some(GameResult::Player(0)));
     }
 }

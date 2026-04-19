@@ -1,8 +1,8 @@
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use crossterm::style::Stylize;
 use crate::result::GameResult;
 use crate::state::GameState;
+use crossterm::style::Stylize;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone)]
 pub struct MancalaState {
@@ -14,10 +14,9 @@ impl MancalaState {
     pub fn starting(with: u8) -> Self {
         Self {
             board: [
-                with, with, with, 0, with, with, with,
-                with, with, with, 0, with, with, with,
+                with, with, with, 0, with, with, with, with, with, with, 0, with, with, with,
             ],
-            player: false
+            player: false,
         }
     }
     const fn get_side_idxs(player: bool) -> [u8; 6] {
@@ -30,6 +29,26 @@ impl MancalaState {
 
     fn get_side(&self, player: bool) -> [u8; 6] {
         Self::get_side_idxs(player).map(|idx| self.board[idx as usize])
+    }
+
+    pub fn opponent_side(&self) -> [u8; 6] {
+        self.get_side(!self.player)
+    }
+
+    pub fn current_side(&self) -> [u8; 6] {
+        self.get_side(self.player)
+    }
+
+    pub fn balls_in_play(&self) -> u16 {
+        self.get_side(self.player)
+            .iter()
+            .map(|&x| x as u16)
+            .sum::<u16>()
+            + self
+                .get_side(!self.player)
+                .iter()
+                .map(|&x| x as u16)
+                .sum::<u16>()
     }
 }
 
@@ -45,7 +64,6 @@ impl GameState for MancalaState {
 
     fn make_move(&mut self, mut choice: Self::Choice) {
         loop {
-
             let mut hand = self.board[choice as usize];
             self.board[choice as usize] = 0;
 
@@ -70,11 +88,14 @@ impl GameState for MancalaState {
 
         if self.get_side(true) == ZERO_ARRAY || self.get_side(false) == ZERO_ARRAY {
             Some(GameResult::Player(!self.player as u8))
-        } else { None }
+        } else {
+            None
+        }
     }
 
     fn candidate_moves(&self) -> Vec<Self::Choice> {
-        Self::get_side_idxs(self.player).into_iter()
+        Self::get_side_idxs(self.player)
+            .into_iter()
             .filter(|&idx| self.board[idx as usize] != 0)
             .collect()
     }
@@ -90,18 +111,17 @@ impl GameState for MancalaState {
 
 impl Display for MancalaState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.board.iter()
+        self.board
+            .iter()
             .map(|&num| num.to_string() + " ")
             .enumerate()
             .map(|(index, value)| match index {
                 0..3 | 4..7 => value.red(),
                 7..10 | 11..14 => value.green(),
                 3 | 10 => value.blue().bold(),
-                _ => value.black()
+                _ => value.black(),
             })
-            .map(|colored|
-                write!(f, "{}", colored)
-            )
+            .map(|colored| write!(f, "{}", colored))
             .collect::<fmt::Result>()
     }
 }

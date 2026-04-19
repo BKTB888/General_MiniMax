@@ -2,18 +2,17 @@
 #![feature(trait_alias)]
 #![feature(decl_macro)]
 
-use crate::players::{randy, Player, human, minimax_creator, stupid_eval, ai_from_eval, alphabeta_creator};
 use crate::game::Game;
 use crate::games::connect4::state::ConnectKState;
-use crate::games::mancala::state::MancalaState;
-use crate::games::mega_tictactoe::player::human_kinrow;
-use crate::games::mega_tictactoe::state::KInARowState;
+use crate::players::Evaluation;
+use crate::players::Search;
+use crate::players::{alphabeta, randys_from_seed, stupid_eval};
 
-mod state;
-mod games;
-mod result;
 mod game;
+mod games;
 mod players;
+mod result;
+mod state;
 
 macro boxed {
     [$x:expr] => {
@@ -25,9 +24,25 @@ macro boxed {
 }
 
 fn main() {
-    type Rules = ConnectKState<4, 6, 7, 2>;
-    let game = Game::<Rules>::new(boxed![
-        randy, randy
+    type Rules = ConnectKState<6, 7>;
+    let mut game = Game::<Rules>::new(boxed![
+        randys_from_seed(42),
+        alphabeta(stupid_eval).to_eval(4).to_player()
     ]);
-    game.print_stats(1_000_000);
+    game.print_stats(10_000);
+
+    /*
+    game = Game::<Rules>::new(boxed![
+        randys_from_seed(42),
+        ai_from_eval(
+            minimax_creator(
+                4,
+                mancala::eval
+            )
+        )
+    ]);
+
+    game.print_stats(10_000);
+
+     */
 }

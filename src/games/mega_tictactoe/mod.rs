@@ -1,4 +1,3 @@
-pub mod state;
-mod coordinate;
 mod evaluation;
 pub mod player;
+pub mod state;

@@ -1,20 +1,16 @@
-use crate::games::mega_tictactoe::state::KInARowState;
-use std::collections::BTreeMap;
-use crate::games::mega_tictactoe::coordinate::{Coordinate, MapInt};
+use crate::games::mega_tictactoe::state::{KInARowState, MapCoord, MapInt};
 use crate::state::GameState;
+use std::collections::BTreeMap;
 
 const DIRS: [(MapInt, MapInt); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
 
 /// For a given player, sum score² over all maximal unblocked runs in every direction.
 /// A run is "unblocked" on one end if the cell beyond it is empty (not occupied by the opponent).
-fn player_score<const K: u8, const NUM_P: u8>(
-    state: &KInARowState<K, NUM_P>,
-    player: u8,
-) -> f32 {
+fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, player: u8) -> f32 {
     let cells = state.cells();
 
     // Track which (coord, dir_index) pairs we've already counted
-    let mut visited: BTreeMap<(Coordinate, usize), bool> = BTreeMap::new();
+    let mut visited: BTreeMap<(MapCoord, usize), bool> = BTreeMap::new();
     let mut total = 0.0f32;
 
     for (&start, &owner) in cells.iter() {
@@ -46,7 +42,7 @@ fn player_score<const K: u8, const NUM_P: u8>(
 
             // Only reward if the run isn't fully blocked on both ends
             let blocked_back = cells.get(&(run_start + neg_dir)).is_some(); // opponent or edge
-            let blocked_front = cells.get(&coord).is_some();                // opponent or edge
+            let blocked_front = cells.get(&coord).is_some(); // opponent or edge
             if blocked_back && blocked_front {
                 // fully sandwiched by opponent pieces — no future value
                 continue;

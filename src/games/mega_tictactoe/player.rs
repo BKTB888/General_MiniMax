@@ -1,13 +1,15 @@
-use crate::games::mega_tictactoe::coordinate::Coordinate;
-use crate::games::mega_tictactoe::state::KInARowState;
+use crate::games::coordinate::Coordinate;
+use crate::games::mega_tictactoe::state::{KInARowState, MapCoord};
 use crate::state::GameState;
 
-pub fn human_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> Coordinate {
+pub fn human_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> MapCoord {
     use crossterm::{
         cursor::MoveTo,
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, MouseButton, MouseEventKind},
+        event::{
+            self, DisableMouseCapture, EnableMouseCapture, Event, MouseButton, MouseEventKind,
+        },
         execute,
-        terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType},
+        terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size},
     };
 
     enable_raw_mode().unwrap();
