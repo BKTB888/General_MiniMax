@@ -1,6 +1,8 @@
 use crate::games::mancala::state::MancalaState;
+use crate::search::EvalResult;
+use crate::search::EvalResult::Eval;
 
-pub fn eval(state: &MancalaState) -> f32 {
+pub fn eval(state: &MancalaState) -> EvalResult {
     let balls_at_op: u16 = state
         .opponent_side()
         .into_iter()
@@ -13,5 +15,5 @@ pub fn eval(state: &MancalaState) -> f32 {
         .sum::<u16>();
     let sum = (balls_at_op + balls_at_me) as f32;
 
-    (balls_at_op as f32) / sum
+    Eval((balls_at_op as f32) / sum)
 }

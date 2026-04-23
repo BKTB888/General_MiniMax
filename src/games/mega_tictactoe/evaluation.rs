@@ -1,4 +1,6 @@
 use crate::games::mega_tictactoe::state::{KInARowState, MapCoord, MapInt};
+use crate::search::EvalResult;
+use crate::search::EvalResult::Eval;
 use crate::state::GameState;
 use std::collections::BTreeMap;
 
@@ -55,7 +57,7 @@ fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, pl
     total
 }
 
-pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> f32 {
+pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> EvalResult {
     let current = state.get_current_player();
 
     let my_score: f32 = player_score(state, current);
@@ -64,5 +66,5 @@ pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>)
         .map(|p| player_score(state, p))
         .sum();
 
-    my_score - opp_score
+    Eval(my_score - opp_score)
 }
