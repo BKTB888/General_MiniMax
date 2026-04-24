@@ -1,12 +1,15 @@
 #![feature(generic_const_exprs)]
 #![feature(trait_alias)]
 #![feature(decl_macro)]
+#![feature(unboxed_closures)]
+#![feature(fn_traits)]
 
 use crate::evals::Evaluation;
 use crate::evals::stupid_eval;
 use crate::game::Game;
 use crate::games::connect4::state::ConnectKState;
 use crate::players::randys_from_seed;
+use crate::search::ABSearch;
 use crate::search::Search;
 use crate::search::alphabeta;
 
@@ -30,8 +33,8 @@ macro boxed {
 fn main() {
     type Rules = ConnectKState<6, 7>;
     let mut game = Game::<Rules>::new(boxed![
-        alphabeta(stupid_eval).to_eval(4).to_player(),
-        randys_from_seed(42)
+        alphabeta(stupid_eval).to_player(4),
+        randys_from_seed(42),
     ]);
     game.print_stats(10_000);
 
