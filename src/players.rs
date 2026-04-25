@@ -33,27 +33,3 @@ pub fn randys_from_seed<S: GameState>(seed: u64) -> impl Player<S> {
     let mut rng = StdRng::seed_from_u64(seed);
     move |state: &S| state.candidate_moves().choose(&mut rng).unwrap().clone()
 }
-/*
-pub fn iterative_deepening<S: GameState>(
-    search: impl Search<S>,
-    time_constraint: Duration,
-) -> impl Player<S> {
-    move |board| {
-        let start = std::time::Instant::now();
-        let (mut game_move, mut result) = search(board, 0);
-        let mut depth = 0;
-
-        loop {
-            if start.elapsed() >= time_constraint || result.is_terminal() {
-                break;
-            }
-
-            depth += 1;
-            (game_move, result) = search(board, depth);
-        }
-
-        println!("Depth: {depth}, Result: {result}");
-        game_move
-    }
-}
- */

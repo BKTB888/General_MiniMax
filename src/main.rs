@@ -1,17 +1,15 @@
 #![feature(generic_const_exprs)]
-#![feature(trait_alias)]
 #![feature(decl_macro)]
-#![feature(unboxed_closures)]
-#![feature(fn_traits)]
 
 use crate::evals::Evaluation;
 use crate::evals::stupid_eval;
 use crate::game::Game;
-use crate::games::connect4::state::ConnectKState;
-use crate::players::randys_from_seed;
+use crate::games::mancala::state::MancalaState;
+use crate::players::human;
 use crate::search::ABSearch;
 use crate::search::Search;
 use crate::search::alphabeta;
+use std::time::Duration;
 
 mod evals;
 mod game;
@@ -31,25 +29,10 @@ macro boxed {
 }
 
 fn main() {
-    type Rules = ConnectKState<6, 7>;
+    type Rules = MancalaState;
     let mut game = Game::<Rules>::new(boxed![
-        alphabeta(stupid_eval).to_player(4),
-        randys_from_seed(42),
+        human,
+        alphabeta(stupid_eval).with_iterative(Duration::from_millis(5)),
     ]);
-    game.print_stats(10_000);
-
-    /*
-    game = Game::<Rules>::new(boxed![
-        randys_from_seed(42),
-        ai_from_eval(
-            minimax_creator(
-                4,
-                mancala::eval
-            )
-        )
-    ]);
-
-    game.print_stats(10_000);
-
-     */
+    game.print_stats(100);
 }

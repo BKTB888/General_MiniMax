@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-colored = "3.1.1"
-rand = "0.10.0"
-crossterm = "0.29.0"
-rayon = "1.11.0"
+colored = "3"
+rand = "0.10"
+crossterm = "0.29"
+rayon = "1"
