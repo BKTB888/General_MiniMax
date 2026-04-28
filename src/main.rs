@@ -4,12 +4,11 @@
 use crate::evals::Evaluation;
 use crate::evals::stupid_eval;
 use crate::game::Game;
-use crate::games::mancala::state::MancalaState;
-use crate::players::human;
+use crate::games::connect4::state::ConnectKState;
+use crate::players::randys_from_seed;
 use crate::search::ABSearch;
 use crate::search::Search;
 use crate::search::alphabeta;
-use std::time::Duration;
 
 mod evals;
 mod game;
@@ -29,10 +28,22 @@ macro boxed {
 }
 
 fn main() {
-    type Rules = MancalaState;
-    let mut game = Game::<Rules>::new(boxed![
-        human,
-        alphabeta(stupid_eval).with_iterative(Duration::from_millis(5)),
-    ]);
-    game.print_stats(100);
+    type Rules = ConnectKState<6, 7>;
+    let p1 = randys_from_seed(42);
+    let p2 = alphabeta(stupid_eval).to_player(5);
+
+    let mut game = Game::<Rules>::new(boxed![p1, p2,]);
+    game.print_stats(1000, false);
+
+    /*
+    play!(
+        Rules,
+        10_000,
+        true,
+        false,
+        p1,
+        p2,
+    );
+
+     */
 }

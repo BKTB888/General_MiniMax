@@ -1,11 +1,11 @@
 use crate::players::Player;
 use crate::search::EvalResult;
-use crate::search::EvalResult::{Draw, Eval, Loss, Win};
+use crate::search::EvalResult::{Draw, Loss, Score, Win};
 use crate::state::GameState;
 use std::fmt::Display;
 use std::ops::Neg;
 
-pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult {
+pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send {
     fn to_player(self) -> impl Player<S>
     where
         Self: Sized,
@@ -25,7 +25,7 @@ pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult {
         }
     }
 }
-impl<S: GameState, F: Fn(&S) -> EvalResult> Evaluation<S> for F {}
+impl<S: GameState, F: Fn(&S) -> EvalResult + Send> Evaluation<S> for F {}
 
 impl EvalResult {
     pub fn is_terminal(&self) -> bool {
@@ -37,7 +37,7 @@ impl EvalResult {
             Win => f32::INFINITY,
             Loss => f32::NEG_INFINITY,
             Draw => 0.0,
-            Eval(score) => *score,
+            Score(score) => *score,
         }
     }
 }
@@ -47,8 +47,8 @@ impl Neg for EvalResult {
         match self {
             Win => Loss,
             Loss => Win,
-            Draw => crate::search::EvalResult::Draw,
-            Eval(score) => Eval(-score),
+            Draw => Draw,
+            Score(score) => Score(-score),
         }
     }
 }
@@ -63,11 +63,11 @@ impl Display for EvalResult {
             Win => write!(f, "Win"),
             Loss => write!(f, "Loss"),
             Draw => write!(f, "Draw"),
-            Eval(score) => write!(f, "{score}"),
+            Score(score) => write!(f, "{score}"),
         }
     }
 }
 
 pub fn stupid_eval<S: GameState>(_: &S) -> EvalResult {
-    EvalResult::Eval(0.0)
+    Score(0.0)
 }

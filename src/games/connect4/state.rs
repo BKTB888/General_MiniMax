@@ -3,6 +3,7 @@ use crate::state::GameState;
 use colored::Colorize;
 use std::cmp::min;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2>
@@ -12,8 +13,10 @@ where
 {
     cells: [[Option<u8>; N as usize]; M as usize],
     player: u8,
+
     choices: [u8; M as usize],
     result: Option<GameResult>,
+    hash: u64,
 }
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Default
@@ -28,6 +31,7 @@ where
             player: 0,
             choices: [0; M as usize],
             result: None,
+            hash: 0,
         }
     }
 }
@@ -77,6 +81,16 @@ where
     }
 }
 
+impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Hash for ConnectKState<N, M, K, NUM_P>
+where
+    [(); N as usize]:,
+    [(); M as usize]:,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash);
+    }
+}
+
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
     for ConnectKState<N, M, K, NUM_P>
 where
@@ -88,10 +102,14 @@ where
 
     fn make_move(&mut self, choice: Self::Choice) {
         if self.result.is_none() {
-            self.cells[choice as usize][self.choices[choice as usize] as usize] = Some(self.player);
-            self.choices[choice as usize] += 1;
+            let col = choice as usize;
+            let row = self.choices[col] as usize;
+            self.cells[col][row] = Some(self.player);
+            self.choices[col] += 1;
 
-            self.result = self.check_result(choice as usize);
+            self.result = self.check_result(col);
+
+            self.hash ^= zobrist_cell_key(col as u64, row as u64, self.player as u64);
 
             self.player = (self.player + 1) % NUM_P;
         } else {
@@ -265,6 +283,19 @@ where
     }
 }
 
+//TODO: Consider storing and XOR shift
+const fn splitmix64(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E7B5);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
+const fn zobrist_cell_key(col: u64, row: u64, player: u64) -> u64 {
+    let idx = col << 16 | row << 8 | player;
+    splitmix64(idx ^ 0xC4F6_E0E1_E2E3_E4E5)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,7 +451,7 @@ mod tests {
     #[test]
     fn test_draw() {
         // Use a tiny board: Connect-5 on 3×3 with 2 players (unreachable win → force full board)
-        type TinyNoWin = ConnectKState<5, 3, 3>;
+        type TinyNoWin = ConnectKState<3, 3, 5>;
         let mut state = TinyNoWin::default();
         // Fill all 9 cells in an order that never produces 5 in a row (impossible on 3×3)
         for col in [0u8, 1, 2, 0, 1, 2, 0, 1, 2] {
@@ -445,7 +476,7 @@ mod tests {
 
     #[test]
     fn test_three_player_win() {
-        type C3P = ConnectKState<3, 6, 7, 3>;
+        type C3P = ConnectKState<6, 7, 3, 3>;
         let mut state = C3P::default();
         // turn order: p0, p1, p2, p0, p1, p2, p0, p1, p2
         make_moves(
@@ -457,5 +488,51 @@ mod tests {
             ],
         );
         assert_eq!(state.get_result(), Some(GameResult::Player(0)));
+    }
+
+    // --- Zobrist hashing ---
+
+    fn zhash<S: GameState>(s: &S) -> u64 {
+        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+        // Use a deterministic hasher so different processes agree.
+        let bh = BuildHasherDefault::<DefaultHasher>::default();
+        bh.hash_one(s)
+    }
+
+    #[test]
+    fn test_zobrist_changes_on_move() {
+        let s0 = C4::default();
+        let mut s1 = s0.clone();
+        s1.make_move(3);
+        assert_ne!(s0.hash, s1.hash);
+        assert_ne!(zhash(&s0), zhash(&s1));
+    }
+
+    #[test]
+    fn test_zobrist_same_position_same_hash() {
+        // Two distinct move orders that produce the identical board AND same side-to-move
+        // must hash equal.
+        let mut a = C4::default();
+        make_moves(&mut a, &[0, 1, 0, 1]); // p0→(0,0), p1→(1,0), p0→(0,1), p1→(1,1)
+
+        let mut b = C4::default();
+        make_moves(&mut b, &[0, 1, 0, 1]); // identical sequence — sanity baseline
+        assert_eq!(a.hash, b.hash);
+
+        // Order-independent reach: p0 plays cols (0,2), p1 plays cols (1,3).
+        let mut c = C4::default();
+        make_moves(&mut c, &[0, 1, 2, 3]); // p0→(0,0), p1→(1,0), p0→(2,0), p1→(3,0)
+        let mut d = C4::default();
+        make_moves(&mut d, &[2, 3, 0, 1]); // p0→(2,0), p1→(3,0), p0→(0,0), p1→(1,0)
+        assert_eq!(c.hash, d.hash);
+    }
+
+    #[test]
+    fn test_zobrist_distinct_for_distinct_positions() {
+        let mut a = C4::default();
+        a.make_move(0);
+        let mut b = C4::default();
+        b.make_move(1);
+        assert_ne!(a.hash, b.hash);
     }
 }

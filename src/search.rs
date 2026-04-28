@@ -5,7 +5,7 @@ use crate::search::EvalResult::{Draw, Loss, Win};
 use crate::state::GameState;
 use std::time::Duration;
 
-pub trait Search<S: GameState>: Fn(&S, u8) -> EvalResult {
+pub trait Search<S: GameState>: Fn(&S, u8) -> EvalResult + Send {
     fn to_eval(self, depth: u8) -> impl Evaluation<S>
     where
         Self: Sized,
@@ -13,9 +13,9 @@ pub trait Search<S: GameState>: Fn(&S, u8) -> EvalResult {
         move |state| self(state, depth)
     }
 }
-impl<S: GameState, F: Fn(&S, u8) -> EvalResult> Search<S> for F {}
+impl<S: GameState, F: Fn(&S, u8) -> EvalResult + Send> Search<S> for F {}
 
-pub trait ABSearch<S: GameState>: Fn(&S, u8, EvalResult, EvalResult) -> EvalResult {
+pub trait ABSearch<S: GameState>: Fn(&S, u8, EvalResult, EvalResult) -> EvalResult + Send {
     fn to_eval(self, depth: u8) -> impl Evaluation<S>
     where
         Self: Sized,
@@ -76,14 +76,14 @@ pub trait ABSearch<S: GameState>: Fn(&S, u8, EvalResult, EvalResult) -> EvalResu
         }
     }
 }
-impl<S: GameState, F: Fn(&S, u8, EvalResult, EvalResult) -> EvalResult> ABSearch<S> for F {}
+impl<S: GameState, F: Fn(&S, u8, EvalResult, EvalResult) -> EvalResult + Send> ABSearch<S> for F {}
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum EvalResult {
     Win,
     Loss,
     Draw,
-    Eval(f32),
+    Score(f32),
 }
 
 pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {

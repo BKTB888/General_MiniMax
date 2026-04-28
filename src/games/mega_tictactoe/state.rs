@@ -4,6 +4,7 @@ use crate::state::GameState;
 use colored::Colorize;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::hash::{Hash, Hasher};
 
 pub type MapInt = i16;
 pub type MapCoord = Coordinate<MapInt, MapInt>;
@@ -36,6 +37,12 @@ impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P
         });
 
         result
+    }
+}
+
+impl<const K: u8, const NUM_P: u8> Hash for KInARowState<K, NUM_P> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        todo!()
     }
 }
 

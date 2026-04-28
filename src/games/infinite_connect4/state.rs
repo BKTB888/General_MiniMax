@@ -1,3 +1,1 @@
-pub struct InfiniteConnect4State {
-    
-}
+pub struct InfiniteConnect4State {}

@@ -1,10 +1,10 @@
-use std::fmt::{Display, Formatter};
 use colored::{Color, ColoredString, Colorize};
+use std::fmt::{Display, Formatter};
 
 #[derive(Ord, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub enum GameResult {
     Player(u8),
-    Draw
+    Draw,
 }
 
 impl Display for GameResult {
@@ -14,18 +14,15 @@ impl Display for GameResult {
 }
 
 impl GameResult {
-
     fn get_colored(&self) -> ColoredString {
         if let GameResult::Player(player) = self {
-            format!("Player {}", player + 1).color(
-                match player {
-                    0 => Color::Red,
-                    1 => Color::Blue,
-                    2 => Color::Green,
-                    3 => Color::Magenta,
-                    _ => color_from_id(*player),
-                }
-            )
+            format!("Player {}", player + 1).color(match player {
+                0 => Color::Red,
+                1 => Color::Blue,
+                2 => Color::Green,
+                3 => Color::Magenta,
+                _ => color_from_id(*player),
+            })
         } else {
             "Draw".color(Color::White)
         }

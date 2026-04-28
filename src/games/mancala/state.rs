@@ -3,6 +3,7 @@ use crate::state::GameState;
 use crossterm::style::Stylize;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub struct MancalaState {
@@ -55,6 +56,12 @@ impl MancalaState {
 impl Default for MancalaState {
     fn default() -> Self {
         Self::starting(6)
+    }
+}
+
+impl Hash for MancalaState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        todo!()
     }
 }
 

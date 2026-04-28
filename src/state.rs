@@ -1,8 +1,9 @@
-use std::fmt::Display;
-use std::str::FromStr;
 use crate::result::GameResult;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::str::FromStr;
 
-pub trait GameState: Default + Display + Clone {
+pub trait GameState: Default + Display + Clone + Hash {
     type Choice: FromStr + Display + Clone + Copy;
     const NUM_P: u8;
     fn make_move(&mut self, choice: Self::Choice);

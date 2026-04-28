@@ -6,8 +6,8 @@ use rand::{
 };
 use std::io;
 
-pub trait Player<S: GameState>: FnMut(&S) -> <S as GameState>::Choice {}
-impl<S: GameState, F: FnMut(&S) -> <S as GameState>::Choice> Player<S> for F {}
+pub trait Player<S: GameState>: FnMut(&S) -> <S as GameState>::Choice + Send {}
+impl<S: GameState, F: FnMut(&S) -> <S as GameState>::Choice + Send> Player<S> for F {}
 
 pub fn human<S: GameState>(state: &S) -> S::Choice {
     loop {
