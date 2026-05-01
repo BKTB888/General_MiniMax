@@ -1,8 +1,11 @@
-use crate::games::mega_tictactoe::state::{KInARowState, MapCoord, MapInt};
-use crate::player::search::EvalResult;
-use crate::player::search::EvalResult::Score;
-use crate::state::GameState;
 use std::collections::BTreeMap;
+
+use general_minimax::{
+    player::search::{EvalResult, EvalResult::Score},
+    state::GameState,
+};
+
+use crate::state::{KInARowState, MapCoord, MapInt};
 
 const DIRS: [(MapInt, MapInt); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
 

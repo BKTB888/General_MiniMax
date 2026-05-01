@@ -1,0 +1,7 @@
+[package]
+name = "infinite_connect4"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+general_minimax = { workspace = true }

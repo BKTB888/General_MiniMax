@@ -1,0 +1,9 @@
+[package]
+name = "general_minimax"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+colored = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }

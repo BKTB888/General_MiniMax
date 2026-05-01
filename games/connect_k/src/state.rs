@@ -1,9 +1,14 @@
-use crate::result::{GameResult, get_player_color};
-use crate::state::GameState;
+use std::{
+    cmp::min,
+    fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
+};
+
 use colored::Colorize;
-use std::cmp::min;
-use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
+use general_minimax::{
+    result::{GameResult, get_player_color},
+    state::GameState,
+};
 
 type HashType = u64;
 
@@ -315,9 +320,9 @@ const fn zobrist_cell_key(col: u64, row: u64, player: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use general_minimax::{result::GameResult, state::GameState};
+
     use super::*;
-    use crate::result::GameResult;
-    use crate::state::GameState;
 
     type C4 = ConnectKState<6, 7>; // standard Connect Four
 

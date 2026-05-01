@@ -1,10 +1,15 @@
-use crate::games::coordinate::Coordinate;
-use crate::result::{GameResult, get_player_color};
-use crate::state::GameState;
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::{Display, Formatter, Result as FmtResult},
+    hash::{Hash, Hasher},
+};
+
 use colored::Colorize;
-use std::collections::{BTreeMap, HashSet};
-use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::hash::{Hash, Hasher};
+use general_minimax::{
+    coordinate::Coordinate,
+    result::{GameResult, get_player_color},
+    state::GameState,
+};
 
 pub type MapInt = i16;
 pub type MapCoord = Coordinate<MapInt, MapInt>;
@@ -228,8 +233,9 @@ impl<const K: u8, const NUM_P: u8> Display for KInARowState<K, NUM_P> {
 
 #[cfg(test)]
 mod tests {
+    use general_minimax::coordinate::Coordinate as C;
+
     use super::*;
-    use crate::games::coordinate::Coordinate as C;
 
     type KIR3 = KInARowState<3>;
 

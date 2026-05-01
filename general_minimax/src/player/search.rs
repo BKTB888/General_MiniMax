@@ -1,11 +1,16 @@
-use crate::player::evals::Evaluation;
-use crate::player::players::Player;
-use crate::player::search::EvalResult::{Draw, Loss, Win};
-use crate::result::GameResult;
-use crate::state::GameState;
-use rayon::iter::ParallelIterator;
-use rayon::prelude::IntoParallelIterator;
 use std::time::Duration;
+
+use rayon::{iter::ParallelIterator, prelude::IntoParallelIterator};
+
+use crate::{
+    player::{
+        evals::Evaluation,
+        players::Player,
+        search::EvalResult::{Draw, Loss, Win},
+    },
+    result::GameResult,
+    state::GameState,
+};
 
 pub trait Search<S: GameState>: Fn(&mut S, u8) -> EvalResult + Sync + Sized {
     fn to_eval(self, depth: u8) -> impl Evaluation<S>

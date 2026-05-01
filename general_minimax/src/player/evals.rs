@@ -1,9 +1,15 @@
-use crate::player::players::Player;
-use crate::player::search::EvalResult;
-use crate::player::search::EvalResult::{Draw, Loss, Score, Win};
-use crate::state::GameState;
-use std::fmt::Display;
-use std::ops::Neg;
+use std::{fmt::Display, ops::Neg};
+
+use crate::{
+    player::{
+        players::Player,
+        search::{
+            EvalResult,
+            EvalResult::{Draw, Loss, Score, Win},
+        },
+    },
+    state::GameState,
+};
 
 pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send + Sync {
     fn to_player(self) -> impl Player<S>

@@ -1,10 +1,12 @@
-use crate::state::GameState;
+use std::io;
+
 use rand::{
     SeedableRng,
     prelude::{IndexedRandom, StdRng},
     rng,
 };
-use std::io;
+
+use crate::state::GameState;
 
 pub trait Player<S: GameState>: FnMut(&S) -> <S as GameState>::Choice {}
 impl<S: GameState, F: FnMut(&S) -> <S as GameState>::Choice> Player<S> for F {}

@@ -1,8 +1,10 @@
-use crate::result::GameResult;
-use crate::state::GameState;
+use std::{
+    fmt,
+    fmt::{Display, Formatter},
+};
+
 use crossterm::style::Stylize;
-use std::fmt;
-use std::fmt::{Display, Formatter};
+use general_minimax::{result::GameResult, state::GameState};
 
 #[derive(Clone)]
 pub struct MancalaState {

@@ -1,7 +1,6 @@
+use std::{fmt::Display, hash::Hash, str::FromStr};
+
 use crate::result::GameResult;
-use std::fmt::Display;
-use std::hash::Hash;
-use std::str::FromStr;
 
 pub trait GameState: Default + Display + Clone + Send + Sync {
     type Choice: FromStr + Display + Copy + Send + Sync;

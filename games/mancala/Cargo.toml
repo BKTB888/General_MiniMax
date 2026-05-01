@@ -1,0 +1,8 @@
+[package]
+name = "mancala"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+general_minimax = { workspace = true }
+crossterm = { workspace = true }

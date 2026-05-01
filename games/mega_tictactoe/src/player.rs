@@ -1,6 +1,6 @@
-use crate::games::coordinate::Coordinate;
-use crate::games::mega_tictactoe::state::{KInARowState, MapCoord};
-use crate::state::GameState;
+use general_minimax::{coordinate::Coordinate, state::GameState};
+
+use crate::state::{KInARowState, MapCoord};
 
 pub fn human_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> MapCoord {
     use crossterm::{

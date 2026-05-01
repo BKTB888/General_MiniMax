@@ -1,6 +1,6 @@
-use crate::games::mancala::state::MancalaState;
-use crate::player::search::EvalResult;
-use crate::player::search::EvalResult::Score;
+use general_minimax::player::search::{EvalResult, EvalResult::Score};
+
+use crate::state::MancalaState;
 
 pub fn eval(state: &MancalaState) -> EvalResult {
     let balls_at_op: u16 = state

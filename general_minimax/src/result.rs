@@ -1,5 +1,6 @@
-use colored::{Color, ColoredString, Colorize};
 use std::fmt::{Display, Formatter};
+
+use colored::{Color, ColoredString, Colorize};
 
 #[derive(Ord, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub enum GameResult {

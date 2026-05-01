@@ -1,6 +1,8 @@
-use std::fmt::{Display, Formatter};
-use std::ops::{Add, AddAssign, Mul};
-use std::str::FromStr;
+use std::{
+    fmt::{Display, Formatter},
+    ops::{Add, AddAssign, Mul},
+    str::FromStr,
+};
 
 #[derive(Ord, Eq, PartialEq, PartialOrd, Clone, Copy, Hash, Debug, Default)]
 pub struct Coordinate<X, Y>(pub X, pub Y);

@@ -1,0 +1,9 @@
+[package]
+name = "mega_tictactoe"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+general_minimax = { workspace = true }
+colored = { workspace = true }
+crossterm = { workspace = true }

@@ -1,7 +1,6 @@
-use crate::player::players::Player;
-use crate::result::GameResult;
-use crate::state::GameState;
 use std::collections::BTreeMap;
+
+use crate::{player::players::Player, result::GameResult, state::GameState};
 
 pub struct Game<S: GameState>
 where

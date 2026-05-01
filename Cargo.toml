@@ -1,9 +1,25 @@
-[package]
-name = "General_MiniMax"
+[workspace]
+resolver = "3"
+members = [
+    "general_minimax",
+    "games/connect_k",
+    "games/mancala",
+    "games/mega_tictactoe",
+    "games/infinite_connect4",
+    "app",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
+general_minimax = { path = "general_minimax" }
+connect_k = { path = "games/connect_k" }
+mancala = { path = "games/mancala" }
+mega_tictactoe = { path = "games/mega_tictactoe" }
+infinite_connect4 = { path = "games/infinite_connect4" }
+
 colored = "3"
 rand = "0.10"
 crossterm = "0.29"
