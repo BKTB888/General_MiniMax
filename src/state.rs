@@ -3,12 +3,15 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
 
-pub trait GameState: Default + Display + Clone + Hash {
-    type Choice: FromStr + Display + Clone + Copy;
+pub trait GameState: Default + Display + Clone + Send + Sync {
+    type Choice: FromStr + Display + Copy + Send + Sync;
+    type Hash: Hash + Copy + Eq;
     const NUM_P: u8;
     fn make_move(&mut self, choice: Self::Choice);
     fn get_result(&self) -> Option<GameResult>;
     fn candidate_moves(&self) -> Vec<Self::Choice>;
     fn is_valid(&self, choice: Self::Choice) -> bool;
-    fn get_current_player(&self) -> u8;
+    fn current_player(&self) -> u8;
+    fn hash(&self) -> Self::Hash;
+    fn undo_move(&mut self, choice: Self::Choice);
 }

@@ -1,4 +1,4 @@
-pub mod connect4;
+pub mod connect_k;
 mod coordinate;
 mod infinite_connect4;
 pub mod mancala;

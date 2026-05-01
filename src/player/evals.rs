@@ -1,11 +1,11 @@
-use crate::players::Player;
-use crate::search::EvalResult;
-use crate::search::EvalResult::{Draw, Loss, Score, Win};
+use crate::player::players::Player;
+use crate::player::search::EvalResult;
+use crate::player::search::EvalResult::{Draw, Loss, Score, Win};
 use crate::state::GameState;
 use std::fmt::Display;
 use std::ops::Neg;
 
-pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send {
+pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send + Sync {
     fn to_player(self) -> impl Player<S>
     where
         Self: Sized,
@@ -25,7 +25,7 @@ pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send {
         }
     }
 }
-impl<S: GameState, F: Fn(&S) -> EvalResult + Send> Evaluation<S> for F {}
+impl<S: GameState, F: Fn(&S) -> EvalResult + Send + Sync> Evaluation<S> for F {}
 
 impl EvalResult {
     pub fn is_terminal(&self) -> bool {

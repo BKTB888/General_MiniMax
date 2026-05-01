@@ -1,4 +1,4 @@
-use crate::players::Player;
+use crate::player::players::Player;
 use crate::result::GameResult;
 use crate::state::GameState;
 use std::collections::BTreeMap;

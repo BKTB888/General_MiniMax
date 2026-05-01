@@ -3,7 +3,6 @@ use crate::state::GameState;
 use crossterm::style::Stylize;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub struct MancalaState {
@@ -59,14 +58,10 @@ impl Default for MancalaState {
     }
 }
 
-impl Hash for MancalaState {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        todo!()
-    }
-}
-
 impl GameState for MancalaState {
     type Choice = u8;
+    //TODO:
+    type Hash = u64;
     const NUM_P: u8 = 2;
 
     fn make_move(&mut self, mut choice: Self::Choice) {
@@ -111,8 +106,16 @@ impl GameState for MancalaState {
         self.candidate_moves().contains(&choice)
     }
 
-    fn get_current_player(&self) -> u8 {
+    fn current_player(&self) -> u8 {
         self.player as u8
+    }
+
+    fn hash(&self) -> Self::Hash {
+        todo!()
+    }
+
+    fn undo_move(&mut self, choice: Self::Choice) {
+        todo!()
     }
 }
 

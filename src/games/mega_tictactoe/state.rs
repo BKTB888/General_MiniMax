@@ -40,14 +40,10 @@ impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P
     }
 }
 
-impl<const K: u8, const NUM_P: u8> Hash for KInARowState<K, NUM_P> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        todo!()
-    }
-}
-
 impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
     type Choice = MapCoord;
+    //TODO:
+    type Hash = ();
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, coord: Self::Choice) {
@@ -86,8 +82,16 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
         !self.cells.contains_key(&choice)
     }
 
-    fn get_current_player(&self) -> u8 {
+    fn current_player(&self) -> u8 {
         self.player
+    }
+
+    fn hash(&self) -> Self::Hash {
+        todo!()
+    }
+
+    fn undo_move(&mut self, choice: Self::Choice) {
+        todo!()
     }
 }
 

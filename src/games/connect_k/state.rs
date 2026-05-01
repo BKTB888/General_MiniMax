@@ -5,6 +5,8 @@ use std::cmp::min;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
+type HashType = u64;
+
 #[derive(Clone)]
 pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2>
 where
@@ -16,7 +18,7 @@ where
 
     choices: [u8; M as usize],
     result: Option<GameResult>,
-    hash: u64,
+    hash: HashType,
 }
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Default
@@ -98,6 +100,7 @@ where
     [(); N as usize]:,
 {
     type Choice = u8;
+    type Hash = HashType;
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, choice: Self::Choice) {
@@ -134,8 +137,22 @@ where
         self.candidate_moves().contains(&choice)
     }
 
-    fn get_current_player(&self) -> u8 {
+    fn current_player(&self) -> u8 {
         self.player
+    }
+
+    fn hash(&self) -> Self::Hash {
+        self.hash
+    }
+
+    fn undo_move(&mut self, choice: Self::Choice) {
+        let col = choice as usize;
+        self.choices[col] -= 1;
+        let row = self.choices[col] as usize;
+        self.cells[col][row] = None;
+        self.result = None;
+        self.player = self.player.checked_sub(1).unwrap_or(NUM_P - 1);
+        self.hash ^= zobrist_cell_key(col as u64, row as u64, self.player as u64);
     }
 }
 
@@ -286,14 +303,14 @@ where
 //TODO: Consider storing and XOR shift
 const fn splitmix64(mut x: u64) -> u64 {
     x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E7B5);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    x ^ (x >> 31)
+    x = (x ^ x >> 30).wrapping_mul(0xBF58_476D_1CE4_E7B5);
+    x = (x ^ x >> 27).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ x >> 31
 }
 
 const fn zobrist_cell_key(col: u64, row: u64, player: u64) -> u64 {
     let idx = col << 16 | row << 8 | player;
-    splitmix64(idx ^ 0xC4F6_E0E1_E2E3_E4E5)
+    splitmix64(idx ^ 0xDEAD_BEEF_CAFE_BABE)
 }
 
 #[cfg(test)]
@@ -492,20 +509,12 @@ mod tests {
 
     // --- Zobrist hashing ---
 
-    fn zhash<S: GameState>(s: &S) -> u64 {
-        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
-        // Use a deterministic hasher so different processes agree.
-        let bh = BuildHasherDefault::<DefaultHasher>::default();
-        bh.hash_one(s)
-    }
-
     #[test]
     fn test_zobrist_changes_on_move() {
         let s0 = C4::default();
         let mut s1 = s0.clone();
         s1.make_move(3);
         assert_ne!(s0.hash, s1.hash);
-        assert_ne!(zhash(&s0), zhash(&s1));
     }
 
     #[test]
@@ -534,5 +543,167 @@ mod tests {
         let mut b = C4::default();
         b.make_move(1);
         assert_ne!(a.hash, b.hash);
+    }
+
+    // --- Undo ---
+
+    fn assert_states_eq<const N: u8, const M: u8, const K: u8, const NUM_P: u8>(
+        a: &ConnectKState<N, M, K, NUM_P>,
+        b: &ConnectKState<N, M, K, NUM_P>,
+    ) where
+        [(); N as usize]:,
+        [(); M as usize]:,
+    {
+        assert_eq!(a.cells, b.cells, "cells differ");
+        assert_eq!(a.player, b.player, "player differs");
+        assert_eq!(a.choices, b.choices, "choices differ");
+        assert_eq!(a.result, b.result, "result differs");
+        assert_eq!(a.hash, b.hash, "hash differs");
+    }
+
+    #[test]
+    fn test_undo_single_move_restores_default() {
+        let original = C4::default();
+        let mut s = C4::default();
+        s.make_move(3);
+        s.undo_move(3);
+        assert_states_eq(&s, &original);
+    }
+
+    #[test]
+    fn test_undo_each_column_restores_default() {
+        let original = C4::default();
+        for col in 0..7u8 {
+            let mut s = C4::default();
+            s.make_move(col);
+            s.undo_move(col);
+            assert_states_eq(&s, &original);
+        }
+    }
+
+    #[test]
+    fn test_undo_clears_winning_result() {
+        let mut s = C4::default();
+        make_moves(&mut s, &[0, 6, 1, 6, 2, 6]);
+        let snapshot = s.clone();
+        s.make_move(3); // p0 wins horizontally
+        assert_eq!(s.get_result(), Some(GameResult::Player(0)));
+        s.undo_move(3);
+        assert_states_eq(&s, &snapshot);
+        assert_eq!(s.get_result(), None);
+    }
+
+    #[test]
+    fn test_undo_chain_returns_to_default() {
+        let original = C4::default();
+        let mut s = C4::default();
+        let moves: [u8; 8] = [0, 1, 0, 1, 2, 3, 4, 5];
+        for &m in &moves {
+            s.make_move(m);
+        }
+        for &m in moves.iter().rev() {
+            s.undo_move(m);
+        }
+        assert_states_eq(&s, &original);
+    }
+
+    #[test]
+    fn test_undo_nested_make_undo_pattern() {
+        // Simulates an alphabeta call site:
+        //   make(A); { make(B); undo(B); make(C); undo(C); } undo(A)
+        // After the full sequence, state must equal the original.
+        let original = C4::default();
+        let mut s = C4::default();
+
+        s.make_move(2); // outer A
+        let after_outer = s.clone();
+
+        s.make_move(3);
+        s.undo_move(3); // inner B
+        assert_states_eq(&s, &after_outer);
+
+        s.make_move(4);
+        s.undo_move(4); // inner C
+        assert_states_eq(&s, &after_outer);
+
+        s.undo_move(2); // undo outer A
+        assert_states_eq(&s, &original);
+    }
+
+    #[test]
+    fn test_undo_alternating_same_column() {
+        let original = C4::default();
+        let mut s = C4::default();
+        for _ in 0..10 {
+            s.make_move(0);
+            s.undo_move(0);
+            assert_states_eq(&s, &original);
+        }
+    }
+
+    #[test]
+    fn test_undo_full_column_then_unwind() {
+        // Fill column 0 to capacity, then undo all 6 moves.
+        let original = C4::default();
+        let mut s = C4::default();
+        for _ in 0..6 {
+            s.make_move(0);
+        }
+        for _ in 0..6 {
+            s.undo_move(0);
+        }
+        assert_states_eq(&s, &original);
+    }
+
+    #[test]
+    fn test_undo_player_wrap_2p() {
+        // After a single move, current player is p1; undo must restore to p0.
+        let mut s = C4::default();
+        assert_eq!(s.current_player(), 0);
+        s.make_move(3);
+        assert_eq!(s.current_player(), 1);
+        s.undo_move(3);
+        assert_eq!(s.current_player(), 0);
+    }
+
+    #[test]
+    fn test_undo_player_wrap_3p() {
+        // 3-player: 0 → 1 → 2 → 0. Undo from p0 must wrap back to p2.
+        type C3P = ConnectKState<6, 7, 4, 3>;
+        let mut s = C3P::default();
+        s.make_move(0); // p0
+        s.make_move(1); // p1
+        s.make_move(2); // p2
+        assert_eq!(s.current_player(), 0);
+        s.undo_move(2);
+        assert_eq!(s.current_player(), 2);
+        s.undo_move(1);
+        assert_eq!(s.current_player(), 1);
+        s.undo_move(0);
+        assert_eq!(s.current_player(), 0);
+    }
+
+    #[test]
+    fn test_undo_zobrist_round_trip() {
+        let mut s = C4::default();
+        let h0 = s.hash;
+        s.make_move(3);
+        assert_ne!(s.hash, h0);
+        s.undo_move(3);
+        assert_eq!(s.hash, h0);
+    }
+
+    #[test]
+    fn test_undo_zobrist_round_trip_long_game() {
+        let mut s = C4::default();
+        let h0 = s.hash;
+        let moves: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2];
+        for &m in &moves {
+            s.make_move(m);
+        }
+        for &m in moves.iter().rev() {
+            s.undo_move(m);
+        }
+        assert_eq!(s.hash, h0);
     }
 }
