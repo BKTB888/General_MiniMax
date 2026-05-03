@@ -1,6 +1,6 @@
 use std::{
     fmt::{Display, Formatter},
-    ops::{Add, AddAssign, Mul},
+    ops::{Add, AddAssign, Mul, Neg},
     str::FromStr,
 };
 
@@ -86,5 +86,13 @@ impl<X, Y, Z: Mul<Y, Output = Y> + Mul<X, Output = X> + Clone> Mul<Z> for Coordi
 
     fn mul(self, rhs: Z) -> Self::Output {
         Coordinate(rhs.clone() * self.0, rhs * self.1)
+    }
+}
+
+impl<X: Neg<Output = X>, Y: Neg<Output = Y>> Neg for Coordinate<X, Y> {
+    type Output = Coordinate<X, Y>;
+
+    fn neg(self) -> Self::Output {
+        Coordinate(-self.0, -self.1)
     }
 }

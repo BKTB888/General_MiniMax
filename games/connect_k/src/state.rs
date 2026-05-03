@@ -6,11 +6,21 @@ use std::{
 
 use colored::Colorize;
 use general_minimax::{
+    mixers::xorshift,
     result::{GameResult, get_player_color},
     state::GameState,
 };
 
-type HashType = u64;
+macro hash_type {
+    { $caller:tt } => {
+        general_minimax::tt_call::tt_return! {
+            $caller
+            type = [{ u32 }]
+        }
+    },
+    () => { u32 }
+}
+type HashType = hash_type!();
 
 #[derive(Clone)]
 pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2>
@@ -88,16 +98,6 @@ where
     }
 }
 
-impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Hash for ConnectKState<N, M, K, NUM_P>
-where
-    [(); N as usize]:,
-    [(); M as usize]:,
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u64(self.hash);
-    }
-}
-
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
     for ConnectKState<N, M, K, NUM_P>
 where
@@ -117,7 +117,8 @@ where
 
             self.result = self.check_result(col);
 
-            self.hash ^= zobrist_cell_key(col as u64, row as u64, self.player as u64);
+            self.hash ^=
+                zobrist_cell_key(col as HashType, row as HashType, self.player as HashType);
 
             self.player = (self.player + 1) % NUM_P;
         } else {
@@ -157,7 +158,7 @@ where
         self.cells[col][row] = None;
         self.result = None;
         self.player = self.player.checked_sub(1).unwrap_or(NUM_P - 1);
-        self.hash ^= zobrist_cell_key(col as u64, row as u64, self.player as u64);
+        self.hash ^= zobrist_cell_key(col as HashType, row as HashType, self.player as HashType);
     }
 }
 
@@ -305,17 +306,9 @@ where
     }
 }
 
-//TODO: Consider storing and XOR shift
-const fn splitmix64(mut x: u64) -> u64 {
-    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    x = (x ^ x >> 30).wrapping_mul(0xBF58_476D_1CE4_E7B5);
-    x = (x ^ x >> 27).wrapping_mul(0x94D0_49BB_1331_11EB);
-    x ^ x >> 31
-}
-
-const fn zobrist_cell_key(col: u64, row: u64, player: u64) -> u64 {
+const fn zobrist_cell_key(col: HashType, row: HashType, player: HashType) -> HashType {
     let idx = col << 16 | row << 8 | player;
-    splitmix64(idx ^ 0xDEAD_BEEF_CAFE_BABE)
+    xorshift!(idx + 1, hash_type!())
 }
 
 #[cfg(test)]

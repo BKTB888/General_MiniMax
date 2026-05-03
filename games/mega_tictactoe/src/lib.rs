@@ -1,5 +1,6 @@
 #![feature(decl_macro)]
+#![feature(const_trait_impl)]
 
-mod evaluation;
+pub mod evaluation;
 pub mod player;
 pub mod state;

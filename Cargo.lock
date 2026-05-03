@@ -14,6 +14,8 @@ version = "0.1.0"
 dependencies = [
  "connect_k",
  "general_minimax",
+    "mancala",
+    "mega_tictactoe",
 ]
 
 [[package]]
@@ -192,6 +194,7 @@ dependencies = [
  "colored",
  "rand",
  "rayon",
+    "tt-call",
 ]
 
 [[package]]
@@ -560,6 +563,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "tt-call"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4f195fd851901624eee5a58c4bb2b4f06399148fcd0ed336e6f1cb60a9881df"
 
 [[package]]
 name = "unicode-ident"

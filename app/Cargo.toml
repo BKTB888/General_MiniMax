@@ -8,5 +8,7 @@ name = "app"
 path = "src/main.rs"
 
 [dependencies]
-general_minimax = { workspace = true }
-connect_k = { workspace = true }
+general_minimax.workspace = true
+connect_k.workspace = true
+mancala.workspace = true
+mega_tictactoe.workspace = true
