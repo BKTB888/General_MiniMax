@@ -34,6 +34,7 @@ where
     choices: [u8; M as usize],
     result: Option<GameResult>,
     hash: HashType,
+    move_stack: Vec<u8>,
 }
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Default
@@ -49,6 +50,7 @@ where
             choices: [0; M as usize],
             result: None,
             hash: 0,
+            move_stack: Vec::new(),
         }
     }
 }
@@ -121,6 +123,7 @@ where
                 zobrist_cell_key(col as HashType, row as HashType, self.player as HashType);
 
             self.player = (self.player + 1) % NUM_P;
+            self.move_stack.push(choice);
         } else {
             panic!(
                 "Game is over, but player {} tried to make a move {choice}.",
@@ -151,8 +154,8 @@ where
         self.hash
     }
 
-    fn undo_move(&mut self, choice: Self::Choice) {
-        let col = choice as usize;
+    fn undo(&mut self) {
+        let col = self.move_stack.pop().unwrap() as usize;
         self.choices[col] -= 1;
         let row = self.choices[col] as usize;
         self.cells[col][row] = None;

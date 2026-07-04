@@ -6,7 +6,7 @@ members = [
     "games/mancala",
     "games/mega_tictactoe",
     "games/infinite_connect4",
-    "app",
+    "app", "games/gomoku",
 ]
 
 [workspace.package]

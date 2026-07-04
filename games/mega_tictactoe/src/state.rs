@@ -34,6 +34,7 @@ pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
     move_history_with_candidates: HashMap<MapCoord, (u16, Vec<MapCoord>)>,
     result: Option<GameResult>,
     hash: HashType,
+    move_stack: Vec<MapCoord>,
 }
 
 impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
@@ -45,6 +46,7 @@ impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
             move_history_with_candidates: HashMap::new(),
             result: None,
             hash: 0,
+            move_stack: Vec::new(),
         }
     }
 }
@@ -83,6 +85,7 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
             let prior_count = self.candidate_moves_with_counts.remove(&coord).unwrap_or(0);
 
             self.add_candidates(coord, prior_count);
+            self.move_stack.push(coord);
         } else {
             panic!(
                 "Game is over, but player {} tried to make a move {coord}.",
@@ -112,7 +115,8 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
         self.hash
     }
 
-    fn undo_move(&mut self, choice: Self::Choice) {
+    fn undo(&mut self) {
+        let choice = self.move_stack.pop().unwrap();
         self.cells.remove(&choice);
         self.player = self.player.checked_sub(1).unwrap_or(NUM_P - 1);
         self.result = None;

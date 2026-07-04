@@ -116,7 +116,7 @@ impl GameState for MancalaState {
         todo!()
     }
 
-    fn undo_move(&mut self, choice: Self::Choice) {
+    fn undo(&mut self) {
         todo!()
     }
 }

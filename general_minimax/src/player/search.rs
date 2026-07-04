@@ -30,7 +30,7 @@ pub trait Search<S: GameState>: Fn(&mut S, u8) -> EvalResult + Sync + Sized {
                     |state, game_move| {
                         state.make_move(game_move);
                         let result = self(state, depth);
-                        state.undo_move(game_move);
+                        state.undo();
                         (game_move, result)
                     },
                 )
@@ -66,7 +66,7 @@ pub trait ABSearch<S: GameState>: Fn(&mut S, u8, EvalResult, EvalResult) -> Eval
         for game_move in moves {
             state.make_move(game_move);
             let score = self(state, depth, -beta, -alpha);
-            state.undo_move(game_move);
+            state.undo();
             if score == beta {
                 return (game_move, Win); // beta cutoff
             }
@@ -139,7 +139,7 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
         for game_move in state.candidate_moves() {
             state.make_move(game_move);
             let score = recursive(state, depth - 1, -beta, -alpha, eval);
-            state.undo_move(game_move);
+            state.undo();
             if score <= beta {
                 return -beta; // beta cutoff
             }
@@ -394,7 +394,7 @@ pub fn minimax<S: GameState>(eval: impl Evaluation<S>) -> impl Search<S> {
                 |state, game_move| {
                     state.make_move(game_move);
                     let result = recursive(state, depth - 1, eval);
-                    state.undo_move(game_move);
+                    state.undo();
                     result
                 },
             )

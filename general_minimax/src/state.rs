@@ -12,5 +12,5 @@ pub trait GameState: Default + Display + Clone + Send + Sync {
     fn is_valid(&self, choice: Self::Choice) -> bool;
     fn current_player(&self) -> u8;
     fn hash(&self) -> Self::Hash;
-    fn undo_move(&mut self, choice: Self::Choice);
+    fn undo(&mut self);
 }
