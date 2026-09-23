@@ -1,4 +1,6 @@
 mod evaluation;
 pub mod state;
+mod player;
 
-pub use evaluation::eval;
+pub use crate::evaluation::eval;
+pub use crate::player::human;

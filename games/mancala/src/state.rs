@@ -10,6 +10,7 @@ use general_minimax::{result::GameResult, state::GameState};
 pub struct MancalaState {
     board: [u8; 14],
     player: bool,
+    board_stack: Vec<[u8; 14]>,
 }
 
 impl MancalaState {
@@ -19,6 +20,7 @@ impl MancalaState {
                 with, with, with, 0, with, with, with, with, with, with, 0, with, with, with,
             ],
             player: false,
+            board_stack: Vec::new(),
         }
     }
     const fn get_side_idxs(player: bool) -> [u8; 6] {
@@ -85,6 +87,8 @@ impl GameState for MancalaState {
             }
         }
         self.player = !self.player;
+
+        self.board_stack.push(self.board.clone());
     }
 
     fn get_result(&self) -> Option<GameResult> {
@@ -117,7 +121,8 @@ impl GameState for MancalaState {
     }
 
     fn undo(&mut self) {
-        todo!()
+        self.board = self.board_stack.pop().unwrap_or_default();
+        self.player = !self.player;
     }
 }
 

@@ -1,19 +1,13 @@
 use std::collections::BTreeMap;
 
-use crate::{player::players::Player, result::GameResult, state::GameState};
+use crate::{AS_USIZE, player::players::Player, result::GameResult, state::GameState};
 
-pub struct Game<S: GameState>
-where
-    [(); S::NUM_P as usize]:,
-{
-    players: [Box<dyn Player<S>>; S::NUM_P as usize],
+pub struct Game<S: GameState> {
+    players: [Box<dyn Player<S>>; AS_USIZE::<{ S::NUM_P }>],
 }
 
-impl<S: GameState> Game<S>
-where
-    [(); S::NUM_P as usize]:,
-{
-    pub fn new(players: [Box<dyn Player<S>>; S::NUM_P as usize]) -> Self {
+impl<S: GameState> Game<S> {
+    pub fn new(players: [Box<dyn Player<S>>; AS_USIZE::<{ S::NUM_P }>]) -> Self {
         Game { players }
     }
 

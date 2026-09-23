@@ -6,6 +6,7 @@ use std::{
 
 use colored::Colorize;
 use general_minimax::{
+    AS_USIZE,
     mixers::xorshift,
     result::{GameResult, get_player_color},
     state::GameState,
@@ -23,15 +24,11 @@ macro hash_type {
 type HashType = hash_type!();
 
 #[derive(Clone)]
-pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2>
-where
-    [(); M as usize]:,
-    [(); N as usize]:,
-{
-    cells: [[Option<u8>; N as usize]; M as usize],
+pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2> {
+    cells: [[Option<u8>; AS_USIZE::<N>]; AS_USIZE::<M>],
     player: u8,
 
-    choices: [u8; M as usize],
+    choices: [u8; AS_USIZE::<M>],
     result: Option<GameResult>,
     hash: HashType,
     move_stack: Vec<u8>,
@@ -39,15 +36,12 @@ where
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Default
     for ConnectKState<N, M, K, NUM_P>
-where
-    [(); M as usize]:,
-    [(); N as usize]:,
 {
     fn default() -> Self {
         Self {
-            cells: [[None; N as usize]; M as usize],
+            cells: [[None; AS_USIZE::<N>]; AS_USIZE::<M>],
             player: 0,
-            choices: [0; M as usize],
+            choices: [0; AS_USIZE::<M>],
             result: None,
             hash: 0,
             move_stack: Vec::new(),
@@ -57,9 +51,6 @@ where
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Display
     for ConnectKState<N, M, K, NUM_P>
-where
-    [(); N as usize]:,
-    [(); M as usize]:,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Top border
@@ -102,9 +93,6 @@ where
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
     for ConnectKState<N, M, K, NUM_P>
-where
-    [(); M as usize]:,
-    [(); N as usize]:,
 {
     type Choice = u8;
     type Hash = HashType;
@@ -165,11 +153,7 @@ where
     }
 }
 
-impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> ConnectKState<N, M, K, NUM_P>
-where
-    [(); M as usize]:,
-    [(); N as usize]:,
-{
+impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> ConnectKState<N, M, K, NUM_P> {
     fn check_result(&self, col: usize) -> Option<GameResult> {
         if self.choices.iter().all(|&h| h == N) {
             return Some(GameResult::Draw);
@@ -325,10 +309,7 @@ mod tests {
     fn make_moves<const N: u8, const M: u8, const K: u8, const NUM_P: u8>(
         state: &mut ConnectKState<N, M, K, NUM_P>,
         moves: &[u8],
-    ) where
-        [(); M as usize]:,
-        [(); N as usize]:,
-    {
+    ) {
         for &m in moves {
             state.make_move(m);
         }
@@ -551,10 +532,7 @@ mod tests {
     fn assert_states_eq<const N: u8, const M: u8, const K: u8, const NUM_P: u8>(
         a: &ConnectKState<N, M, K, NUM_P>,
         b: &ConnectKState<N, M, K, NUM_P>,
-    ) where
-        [(); N as usize]:,
-        [(); M as usize]:,
-    {
+    ) {
         assert_eq!(a.cells, b.cells, "cells differ");
         assert_eq!(a.player, b.player, "player differs");
         assert_eq!(a.choices, b.choices, "choices differ");
@@ -567,7 +545,7 @@ mod tests {
         let original = C4::default();
         let mut s = C4::default();
         s.make_move(3);
-        s.undo_move(3);
+        s.undo();
         assert_states_eq(&s, &original);
     }
 
@@ -577,7 +555,7 @@ mod tests {
         for col in 0..7u8 {
             let mut s = C4::default();
             s.make_move(col);
-            s.undo_move(col);
+            s.undo();
             assert_states_eq(&s, &original);
         }
     }
@@ -589,7 +567,7 @@ mod tests {
         let snapshot = s.clone();
         s.make_move(3); // p0 wins horizontally
         assert_eq!(s.get_result(), Some(GameResult::Player(0)));
-        s.undo_move(3);
+        s.undo();
         assert_states_eq(&s, &snapshot);
         assert_eq!(s.get_result(), None);
     }
@@ -602,8 +580,8 @@ mod tests {
         for &m in &moves {
             s.make_move(m);
         }
-        for &m in moves.iter().rev() {
-            s.undo_move(m);
+        for _ in &moves {
+            s.undo();
         }
         assert_states_eq(&s, &original);
     }
@@ -620,14 +598,14 @@ mod tests {
         let after_outer = s.clone();
 
         s.make_move(3);
-        s.undo_move(3); // inner B
+        s.undo(); // inner B
         assert_states_eq(&s, &after_outer);
 
         s.make_move(4);
-        s.undo_move(4); // inner C
+        s.undo(); // inner C
         assert_states_eq(&s, &after_outer);
 
-        s.undo_move(2); // undo outer A
+        s.undo(); // undo outer A
         assert_states_eq(&s, &original);
     }
 
@@ -637,7 +615,7 @@ mod tests {
         let mut s = C4::default();
         for _ in 0..10 {
             s.make_move(0);
-            s.undo_move(0);
+            s.undo();
             assert_states_eq(&s, &original);
         }
     }
@@ -651,7 +629,7 @@ mod tests {
             s.make_move(0);
         }
         for _ in 0..6 {
-            s.undo_move(0);
+            s.undo();
         }
         assert_states_eq(&s, &original);
     }
@@ -663,7 +641,7 @@ mod tests {
         assert_eq!(s.current_player(), 0);
         s.make_move(3);
         assert_eq!(s.current_player(), 1);
-        s.undo_move(3);
+        s.undo();
         assert_eq!(s.current_player(), 0);
     }
 
@@ -676,11 +654,11 @@ mod tests {
         s.make_move(1); // p1
         s.make_move(2); // p2
         assert_eq!(s.current_player(), 0);
-        s.undo_move(2);
+        s.undo();
         assert_eq!(s.current_player(), 2);
-        s.undo_move(1);
+        s.undo();
         assert_eq!(s.current_player(), 1);
-        s.undo_move(0);
+        s.undo();
         assert_eq!(s.current_player(), 0);
     }
 
@@ -690,7 +668,7 @@ mod tests {
         let h0 = s.hash;
         s.make_move(3);
         assert_ne!(s.hash, h0);
-        s.undo_move(3);
+        s.undo();
         assert_eq!(s.hash, h0);
     }
 
@@ -702,8 +680,8 @@ mod tests {
         for &m in &moves {
             s.make_move(m);
         }
-        for &m in moves.iter().rev() {
-            s.undo_move(m);
+        for _ in &moves {
+            s.undo();
         }
         assert_eq!(s.hash, h0);
     }

@@ -1,4 +1,3 @@
-#![feature(generic_const_exprs)]
 #![feature(decl_macro)]
 
 use general_minimax::{
@@ -9,7 +8,9 @@ use general_minimax::{
         search::{ABSearch, alphabeta},
     },
 };
-use mancala::state::MancalaState;
+use mancala::{
+    state::MancalaState,
+};
 
 macro boxed {
     [$x:expr] => {
@@ -22,8 +23,8 @@ macro boxed {
 
 fn main() {
     type Rules = MancalaState;
-    let p1 = human;
-    let p2 = alphabeta(stupid_eval).to_player(1);
+    let p1 = mancala::human;
+    let p2 = alphabeta(stupid_eval).to_player(2);
     let num_games = 100_000;
 
     let mut game = Game::<Rules>::new(boxed![p1, p2]);

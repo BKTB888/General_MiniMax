@@ -384,7 +384,7 @@ mod tests {
         let original = KIR5::default();
         let mut s = KIR5::default();
         s.make_move(C(0, 0));
-        s.undo_move(C(0, 0));
+        s.undo();
         assert_states_eq(&s, &original);
     }
 
@@ -394,7 +394,7 @@ mod tests {
         let h0 = s.hash;
         s.make_move(C(0, 0));
         assert_ne!(s.hash, h0);
-        s.undo_move(C(0, 0));
+        s.undo();
         assert_eq!(s.hash, h0);
     }
 
@@ -417,8 +417,8 @@ mod tests {
         for &m in &moves {
             s.make_move(m);
         }
-        for &m in moves.iter().rev() {
-            s.undo_move(m);
+        for _ in &moves {
+            s.undo();
         }
         assert_eq!(s.hash, h0);
     }
@@ -442,8 +442,8 @@ mod tests {
         for &m in &moves {
             s.make_move(m);
         }
-        for &m in moves.iter().rev() {
-            s.undo_move(m);
+        for _ in &moves {
+            s.undo();
         }
         assert_states_eq(&s, &original);
     }
@@ -455,7 +455,7 @@ mod tests {
         let snapshot = s.clone();
         s.make_move(C(2, 0)); // p0 wins horizontally at y=0
         assert_eq!(s.get_result(), Some(GameResult::Player(0)));
-        s.undo_move(C(2, 0));
+        s.undo();
         assert_eq!(s.get_result(), None);
         assert_states_eq(&s, &snapshot);
     }
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(s.current_player(), 0);
         s.make_move(C(0, 0));
         assert_eq!(s.current_player(), 1);
-        s.undo_move(C(0, 0));
+        s.undo();
         assert_eq!(s.current_player(), 0);
     }
 
@@ -477,12 +477,12 @@ mod tests {
         s.make_move(C(0, 0));
         let after_outer = s.clone();
         s.make_move(C(1, 0));
-        s.undo_move(C(1, 0));
+        s.undo();
         assert_states_eq(&s, &after_outer);
         s.make_move(C(0, 1));
-        s.undo_move(C(0, 1));
+        s.undo();
         assert_states_eq(&s, &after_outer);
-        s.undo_move(C(0, 0));
+        s.undo();
         assert_states_eq(&s, &original);
     }
 }
