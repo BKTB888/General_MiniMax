@@ -69,6 +69,7 @@ impl GameState for MancalaState {
     const NUM_P: u8 = 2;
 
     fn make_move(&mut self, mut choice: Self::Choice) {
+        self.board_stack.push(self.board);
         loop {
             let mut hand = self.board[choice as usize];
             self.board[choice as usize] = 0;
@@ -87,8 +88,6 @@ impl GameState for MancalaState {
             }
         }
         self.player = !self.player;
-
-        self.board_stack.push(self.board.clone());
     }
 
     fn get_result(&self) -> Option<GameResult> {
@@ -121,7 +120,7 @@ impl GameState for MancalaState {
     }
 
     fn undo(&mut self) {
-        self.board = self.board_stack.pop().unwrap_or_default();
+        self.board = self.board_stack.pop().expect("undo called with no move to undo");
         self.player = !self.player;
     }
 }
