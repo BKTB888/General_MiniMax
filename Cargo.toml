@@ -24,3 +24,4 @@ colored = "3"
 rand = "0.10"
 crossterm = "0.29"
 rayon = "1"
+clap = { version = "4", features = ["derive"] }

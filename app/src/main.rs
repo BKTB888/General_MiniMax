@@ -1,33 +1,15 @@
-#![feature(decl_macro)]
+#![feature(
+    generic_const_args,
+    min_generic_const_args,
+    macroless_generic_const_args
+)]
+#![allow(incomplete_features)]
 
-use general_minimax::{
-    game::Game,
-    player::{
-        evals::stupid_eval,
-        players::human,
-        search::{ABSearch, alphabeta},
-    },
-};
-use mancala::{
-    state::MancalaState,
-};
+mod cli;
 
-macro boxed {
-    [$x:expr] => {
-        std::array::from_fn(|_| Box::new($x) as Box<dyn Player<_>>)
-    },
-    [$($x:expr),* $(,)?] => {
-        [$(Box::new($x)),*]
-    },
-}
+use clap::Parser;
+use cli::CLI;
 
 fn main() {
-    type Rules = MancalaState;
-    let p1 = mancala::human;
-    let p2 = alphabeta(stupid_eval).to_player(2);
-    let num_games = 100_000;
-
-    let mut game = Game::<Rules>::new(boxed![p1, p2]);
-    game.print_stats(num_games, false);
-    //game.print_play()
+    CLI::parse().run();
 }
