@@ -24,8 +24,9 @@ pub struct CLI {
     /// Same values as `--p1`.
     #[arg(long, default_value = "alphabeta:4")]
     p2: PlayerKind,
+    /// Defaults to `play`.
     #[command(subcommand)]
-    mode: Mode,
+    mode: Option<Mode>,
 }
 
 impl CLI {
@@ -51,8 +52,8 @@ impl CLI {
         let mut game = Game::<S>::new(players);
 
         match self.mode {
-            Mode::Play => game.play().print(),
-            Mode::Stats { games, parallel } => game.stats(games, parallel).print(),
+            None | Some(Mode::Play) => game.play().print(),
+            Some(Mode::Stats { games, parallel }) => game.stats(games, parallel).print(),
         }
     }
 }
