@@ -51,8 +51,8 @@ impl CLI {
         let mut game = Game::<S>::new(players);
 
         match self.mode {
-            Mode::Play => game.play().print_result(),
-            Mode::Stats { games, parallel } => game.print_stats(games, parallel),
+            Mode::Play => game.play().print(),
+            Mode::Stats { games, parallel } => game.stats(games, parallel).print(),
         }
     }
 }

@@ -1,4 +1,7 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 use crate::{AS_USIZE, player::players::Player, result::GameResult, state::GameState};
 
@@ -37,14 +40,14 @@ impl<S: GameState> Game<S> {
                 i += 1;
 
                 if let Some(result) = state.get_result() {
-                    result.print_result();
+                    result.print();
                     return;
                 }
             }
         }
     }
 
-    pub fn stats(&mut self, num_games: u32, parallel: bool) -> BTreeMap<GameResult, u32> {
+    pub fn stats(&mut self, num_games: u32, parallel: bool) -> Stats {
         if parallel {
             todo!();
             /*
@@ -63,97 +66,44 @@ impl<S: GameState> Game<S> {
 
              */
         } else {
-            (0..num_games)
+            let now = Instant::now();
+            let results = (0..num_games)
                 .map(|_| self.play())
                 .fold(BTreeMap::new(), |mut acc, result| {
                     *acc.entry(result).or_default() += 1;
                     acc
-                })
+                });
+            let elapsed = now.elapsed();
+
+            Stats::new(results, elapsed, num_games)
         }
-    }
-
-    pub fn print_stats(&mut self, num_games: u32, parallel: bool) {
-        let now = std::time::Instant::now();
-
-        let stats = self.stats(num_games, parallel);
-
-        let elapsed = now.elapsed();
-
-        stats.iter().for_each(|(result, &count)| {
-            println!(
-                "{result}: {:.2}%",
-                (count as f64 / num_games as f64) * 100.0
-            )
-        });
-
-        println!("Time / game: {:.2?}", elapsed / num_games);
-        println!("Elapsed time: {:.2?}", elapsed);
     }
 }
-//TODO: Parallel does not work
-pub macro play {
-    ($rules:ty, $num_games:literal, true, $parallel:literal, $($player:expr,)* $(,)?) => {{
-        let now = std::time::Instant::now();
 
-        let stats = if $parallel {
-            play!($rules, $num_games, true, $($player, )*)
-        } else {
-            play!($rules, $num_games, false, $($player, )*)
-        };
+pub struct Stats {
+    results: BTreeMap<GameResult, u32>,
+    elapsed: Duration,
+    num_games: u32,
+}
 
-        let elapsed = now.elapsed();
+impl Stats {
+    fn new(results: BTreeMap<GameResult, u32>, elapsed: Duration, num_games: u32) -> Self {
+        Self {
+            results,
+            elapsed,
+            num_games,
+        }
+    }
 
-        stats.iter().for_each(|(result, &count)| {
+    pub fn print(&self) {
+        for (result, &count) in &self.results {
             println!(
                 "{result}: {:.2}%",
-                (count as f64 / $num_games as f64) * 100.0
+                (count as f64 / self.num_games as f64) * 100.0
             )
-        });
-
-        println!("Time / game: {:.2?}", elapsed / $num_games);
-        println!("Elapsed time: {:.2?}", elapsed);
-    }},
-
-    ($rules:ty, $num_games:literal, false, $parallel:literal, $($player:expr,)* $(,)?) => {{
-        play!($rules, $num_games, $parallel, $($player, )*)
-    }},
-
-
-    ($rules:ty, $num_games:literal, true, $($player:expr,)* $(,)?) => {{
-        (0..$num_games)
-                .into_par_iter()
-                .map(|_| play!($rules, $($player, )*))
-                .fold(|| BTreeMap::new(), |mut acc, result| {
-                    *acc.entry(result).or_default() += 1;
-                    acc
-                }).reduce(|| BTreeMap::new(), |mut a, b| {
-                    for (result, v) in b {
-                        *a.entry(result).or_default() += v;
-                    }
-                    a
-                })
-    }},
-
-    ($rules:ty, $num_games:literal, false, $($player:expr,)* $(,)?) => {{
-        (0..$num_games)
-            .map(|_| play!($rules, $($player, )*))
-            .fold(BTreeMap::<GameResult, u32>::new(), |mut acc, result| {
-                *acc.entry(result).or_default() += 1;
-                acc
-            })
-    }},
-
-    ($rules:ty, $($player:expr,)* $(,)?) => {{
-        //Todo: Should somehow count the players, so that there are no more then rules allow
-        let mut state = <$rules>::default();
-
-        loop {
-            $(let choice = $player(&state);
-            state.make_move(choice);
-
-            if let Some(result) = state.get_result() {
-                break result;
-            })*
         }
-    }},
+
+        println!("Time / game: {:.2?}", self.elapsed / self.num_games);
+        println!("Elapsed time: {:.2?}", self.elapsed);
+    }
 }

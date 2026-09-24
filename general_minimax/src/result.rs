@@ -29,7 +29,7 @@ impl GameResult {
         }
     }
 
-    pub fn print_result(&self) {
+    pub fn print(&self) {
         if let GameResult::Player(_) = self {
             println!("{} won!", self);
         } else {
