@@ -1,2 +1,4 @@
 /target
 /.idea
+# samply output
+profile.json.gz

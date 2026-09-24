@@ -8,3 +8,7 @@ colored.workspace = true
 rand.workspace = true
 rayon.workspace = true
 tt-call = "1"
+criterion = { workspace = true, optional = true }
+
+[features]
+bench = ["dep:criterion"]

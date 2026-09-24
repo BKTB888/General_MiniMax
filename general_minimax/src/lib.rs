@@ -13,6 +13,7 @@ pub mod mixers;
 pub mod player;
 pub mod result;
 pub mod state;
+pub mod utils;
 
 pub use tt_call;
 

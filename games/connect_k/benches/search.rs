@@ -1,0 +1,45 @@
+#![feature(
+    generic_const_args,
+    min_generic_const_args,
+    macroless_generic_const_args
+)]
+#![allow(incomplete_features)]
+
+use connect_k::state::ConnectKState;
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use general_minimax::{
+    player::{
+        evals::stupid_eval,
+        search::{ABSearch, Search, alphabeta, alphabeta_tt, minimax},
+    },
+    utils::position,
+};
+
+type Connect4 = ConnectKState<7, 6>;
+
+/// One root search at a fixed depth: alphabeta with and without the transposition table, and
+/// minimax, which runs on rayon so its time depends on free cores.
+fn search(c: &mut Criterion) {
+    let mut state: Connect4 = position(0, 8);
+    let plain = alphabeta(stupid_eval);
+    let tt = alphabeta_tt(stupid_eval);
+
+    let mut group = c.benchmark_group("connect4");
+    for depth in [4, 6] {
+        // `find_best` undoes its moves, so `state` is the same position every iteration.
+        group.bench_function(BenchmarkId::new("alphabeta", depth), |b| {
+            b.iter(|| plain.find_best(&mut state, depth))
+        });
+        group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
+            b.iter(|| tt.find_best(&mut state, depth))
+        });
+        let mut mm = minimax(stupid_eval).to_player(depth);
+        group.bench_function(BenchmarkId::new("minimax", depth), |b| {
+            b.iter(|| mm(&state))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, search);
+criterion_main!(benches);

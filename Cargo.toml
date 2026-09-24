@@ -25,3 +25,13 @@ rand = "0.10"
 crossterm = "0.29"
 rayon = "1"
 clap = { version = "4", features = ["derive"] }
+criterion = "0.8"
+
+# Release speed with debug symbols, so profilers like samply show function names.
+[profile.profiling]
+inherits = "release"
+debug = true
+
+# Same for bench binaries, so `games/profile-bench.sh` can profile them.
+[profile.bench]
+debug = true

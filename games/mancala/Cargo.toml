@@ -6,3 +6,19 @@ edition.workspace = true
 [dependencies]
 general_minimax = { workspace = true }
 crossterm = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+general_minimax = { workspace = true, features = ["bench"] }
+
+[[bench]]
+name = "search"
+harness = false
+
+[[bench]]
+name = "node_ops"
+harness = false
+
+[[bench]]
+name = "full_game"
+harness = false
