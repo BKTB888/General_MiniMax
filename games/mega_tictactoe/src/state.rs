@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt::{Display, Formatter, Result as FmtResult},
+    hash::{BuildHasherDefault, DefaultHasher},
 };
 
 use colored::Colorize;
@@ -13,7 +14,9 @@ use general_minimax::{
 
 pub type MapInt = i16;
 pub type MapCoord = Coordinate<MapInt, MapInt>;
-type Map = HashMap<MapCoord, u8>;
+/// `HashMap` with a fixed seed, so iteration order is the same on every run.
+type FixedMap<K, V> = HashMap<K, V, BuildHasherDefault<DefaultHasher>>;
+type Map = FixedMap<MapCoord, u8>;
 
 macro hash_type {
     { $caller:tt } => {
@@ -30,8 +33,8 @@ type HashType = hash_type!();
 pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
     cells: Map,
     player: u8,
-    candidate_moves_with_counts: HashMap<MapCoord, u16>,
-    move_history_with_candidates: HashMap<MapCoord, (u16, Vec<MapCoord>)>,
+    candidate_moves_with_counts: FixedMap<MapCoord, u16>,
+    move_history_with_candidates: FixedMap<MapCoord, (u16, Vec<MapCoord>)>,
     result: Option<GameResult>,
     hash: HashType,
     move_stack: Vec<MapCoord>,
@@ -40,10 +43,10 @@ pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
 impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
     fn default() -> Self {
         Self {
-            cells: Map::new(),
+            cells: Map::default(),
             player: 0,
-            candidate_moves_with_counts: HashMap::from([((0, 0).into(), 1)]),
-            move_history_with_candidates: HashMap::new(),
+            candidate_moves_with_counts: [((0, 0).into(), 1)].into_iter().collect(),
+            move_history_with_candidates: FixedMap::default(),
             result: None,
             hash: 0,
             move_stack: Vec::new(),
