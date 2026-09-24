@@ -8,7 +8,7 @@ use general_minimax::{
     player::{
         evals::{Evaluation, stupid_eval},
         players::{Player, human, randy},
-        search::{ABSearch, alphabeta},
+        search::{ABSearch, alphabeta, alphabeta_tt},
     },
     state::GameState,
 };
@@ -18,7 +18,7 @@ use mega_tictactoe::{evaluation::eval_kinrow, player::human_kinrow, state::KInAR
 #[derive(Parser)]
 pub struct CLI {
     game: GameKind,
-    /// human, randy, alphabeta:<depth> or iterative:<ms per move>
+    /// human, randy, alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms per move> or iterative-tt:<ms per move>
     #[arg(long, default_value = "human")]
     p1: PlayerKind,
     /// Same values as `--p1`.
@@ -67,8 +67,12 @@ fn make_player<S: GameState + 'static>(
         PlayerKind::Human => Box::new(human),
         PlayerKind::Randy => Box::new(randy),
         PlayerKind::Alphabeta(depth) => Box::new(alphabeta(eval).to_player(depth)),
+        PlayerKind::AlphabetaTT(depth) => Box::new(alphabeta_tt(eval).to_player(depth)),
         PlayerKind::Iterative(ms) => {
             Box::new(alphabeta(eval).with_iterative(Duration::from_millis(ms)))
+        }
+        PlayerKind::IterativeTT(ms) => {
+            Box::new(alphabeta_tt(eval).with_iterative(Duration::from_millis(ms)))
         }
     }
 }
@@ -85,8 +89,12 @@ pub enum PlayerKind {
     Human,
     Randy,
     Alphabeta(u8),
+    /// Alphabeta with a transposition table.
+    AlphabetaTT(u8),
     /// Iterative deepening with a time budget in ms per move.
     Iterative(u64),
+    /// Iterative deepening with a transposition table.
+    IterativeTT(u64),
 }
 
 impl FromStr for PlayerKind {
@@ -101,9 +109,12 @@ impl FromStr for PlayerKind {
             "human" => Ok(PlayerKind::Human),
             "randy" => Ok(PlayerKind::Randy),
             "alphabeta" => Ok(PlayerKind::Alphabeta(number(name, arg)?)),
+            "alphabeta-tt" => Ok(PlayerKind::AlphabetaTT(number(name, arg)?)),
             "iterative" => Ok(PlayerKind::Iterative(number(name, arg)?)),
+            "iterative-tt" => Ok(PlayerKind::IterativeTT(number(name, arg)?)),
             _ => Err(format!(
-                "unknown player `{name}`, expected human, randy, alphabeta:<depth> or iterative:<ms>"
+                "unknown player `{name}`, expected human, randy, alphabeta:<depth>, \
+                 alphabeta-tt:<depth>, iterative:<ms> or iterative-tt:<ms>"
             )),
         }
     }
