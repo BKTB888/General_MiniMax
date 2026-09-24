@@ -1,3 +1,5 @@
+use std::{fmt::Display, str::FromStr, time::Duration};
+
 use clap::{Parser, Subcommand, ValueEnum};
 use connect_k::state::ConnectKState;
 use general_minimax::{
@@ -16,13 +18,12 @@ use mega_tictactoe::{evaluation::eval_kinrow, player::human_kinrow, state::KInAR
 #[derive(Parser)]
 pub struct CLI {
     game: GameKind,
+    /// human, randy, alphabeta:<depth> or iterative:<ms per move>
     #[arg(long, default_value = "human")]
     p1: PlayerKind,
-    #[arg(long, default_value = "alphabeta")]
+    /// Same values as `--p1`.
+    #[arg(long, default_value = "alphabeta:4")]
     p2: PlayerKind,
-    /// Search depth for alphabeta players.
-    #[arg(long, default_value_t = 4)]
-    depth: u8,
     #[command(subcommand)]
     mode: Mode,
 }
@@ -46,11 +47,11 @@ impl CLI {
     ) {
         let kinds = [self.p1, self.p2];
         let players: [Box<dyn Player<S>>; AS_USIZE::<{ S::NUM_P }>] =
-            std::array::from_fn(|i| make_player(kinds[i], self.depth, eval, human));
+            std::array::from_fn(|i| make_player(kinds[i], eval, human));
         let mut game = Game::<S>::new(players);
 
         match self.mode {
-            Mode::Play => game.print_play(),
+            Mode::Play => game.play().print_result(),
             Mode::Stats { games, parallel } => game.print_stats(games, parallel),
         }
     }
@@ -58,14 +59,16 @@ impl CLI {
 
 fn make_player<S: GameState + 'static>(
     kind: PlayerKind,
-    depth: u8,
     eval: impl Evaluation<S> + 'static,
     human: fn(&S) -> S::Choice,
 ) -> Box<dyn Player<S>> {
     match kind {
         PlayerKind::Human => Box::new(human),
         PlayerKind::Randy => Box::new(randy),
-        PlayerKind::Alphabeta => Box::new(alphabeta(eval).to_player(depth)),
+        PlayerKind::Alphabeta(depth) => Box::new(alphabeta(eval).to_player(depth)),
+        PlayerKind::Iterative(ms) => {
+            Box::new(alphabeta(eval).with_iterative(Duration::from_millis(ms)))
+        }
     }
 }
 
@@ -76,11 +79,40 @@ pub enum GameKind {
     FiveInRow,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy)]
 pub enum PlayerKind {
     Human,
     Randy,
-    Alphabeta,
+    Alphabeta(u8),
+    /// Iterative deepening with a time budget in ms per move.
+    Iterative(u64),
+}
+
+impl FromStr for PlayerKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (name, arg) = match s.split_once(':') {
+            Some((name, arg)) => (name, Some(arg)),
+            None => (s, None),
+        };
+        match name {
+            "human" => Ok(PlayerKind::Human),
+            "randy" => Ok(PlayerKind::Randy),
+            "alphabeta" => Ok(PlayerKind::Alphabeta(number(name, arg)?)),
+            "iterative" => Ok(PlayerKind::Iterative(number(name, arg)?)),
+            _ => Err(format!(
+                "unknown player `{name}`, expected human, randy, alphabeta:<depth> or iterative:<ms>"
+            )),
+        }
+    }
+}
+
+/// Parses the number after `name:`, with errors naming the player.
+fn number<T: FromStr<Err: Display>>(name: &str, arg: Option<&str>) -> Result<T, String> {
+    arg.ok_or(format!("`{name}` needs a number, e.g. `{name}:4`"))?
+        .parse()
+        .map_err(|e| format!("`{name}`: {e}"))
 }
 
 #[derive(Subcommand)]
@@ -91,7 +123,7 @@ pub enum Mode {
     Stats {
         #[arg(long, default_value_t = 1000)]
         games: u32,
-        #[arg(long)]
+        #[arg(long, default_value = "false")]
         parallel: bool,
     },
 }
