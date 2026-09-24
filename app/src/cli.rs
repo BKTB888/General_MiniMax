@@ -7,7 +7,7 @@ use general_minimax::{
     game::Game,
     player::{
         evals::{Evaluation, stupid_eval},
-        players::{Player, human, randy},
+        players::{Player, human, randy, randys_from_seed},
         search::{ABSearch, alphabeta, alphabeta_tt},
     },
     state::GameState,
@@ -18,7 +18,7 @@ use mega_tictactoe::{evaluation::eval_kinrow, player::human_kinrow, state::KInAR
 #[derive(Parser)]
 pub struct CLI {
     game: GameKind,
-    /// human, randy, alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms per move> or iterative-tt:<ms per move>
+    /// human, randy[:<seed>], alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms per move> or iterative-tt:<ms per move>
     #[arg(long, default_value = "human")]
     p1: PlayerKind,
     /// Same values as `--p1`.
@@ -65,7 +65,8 @@ fn make_player<S: GameState + 'static>(
 ) -> Box<dyn Player<S>> {
     match kind {
         PlayerKind::Human => Box::new(human),
-        PlayerKind::Randy => Box::new(randy),
+        PlayerKind::Randy(None) => Box::new(randy),
+        PlayerKind::Randy(Some(seed)) => Box::new(randys_from_seed(seed)),
         PlayerKind::Alphabeta(depth) => Box::new(alphabeta(eval).to_player(depth)),
         PlayerKind::AlphabetaTT(depth) => Box::new(alphabeta_tt(eval).to_player(depth)),
         PlayerKind::Iterative(ms) => {
@@ -87,7 +88,8 @@ pub enum GameKind {
 #[derive(Clone, Copy)]
 pub enum PlayerKind {
     Human,
-    Randy,
+    /// Random moves, reproducible when seeded.
+    Randy(Option<u64>),
     Alphabeta(u8),
     /// Alphabeta with a transposition table.
     AlphabetaTT(u8),
@@ -107,13 +109,13 @@ impl FromStr for PlayerKind {
         };
         match name {
             "human" => Ok(PlayerKind::Human),
-            "randy" => Ok(PlayerKind::Randy),
+            "randy" => Ok(PlayerKind::Randy(arg.map(|_| number(name, arg)).transpose()?)),
             "alphabeta" => Ok(PlayerKind::Alphabeta(number(name, arg)?)),
             "alphabeta-tt" => Ok(PlayerKind::AlphabetaTT(number(name, arg)?)),
             "iterative" => Ok(PlayerKind::Iterative(number(name, arg)?)),
             "iterative-tt" => Ok(PlayerKind::IterativeTT(number(name, arg)?)),
             _ => Err(format!(
-                "unknown player `{name}`, expected human, randy, alphabeta:<depth>, \
+                "unknown player `{name}`, expected human, randy[:<seed>], alphabeta:<depth>, \
                  alphabeta-tt:<depth>, iterative:<ms> or iterative-tt:<ms>"
             )),
         }
