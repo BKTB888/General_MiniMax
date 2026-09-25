@@ -1,13 +1,15 @@
 use std::io::Write;
+
 use crossterm::style::Stylize;
 use general_minimax::state::GameState;
+
 use crate::state::MancalaState;
 
 pub fn human(board: &MancalaState) -> u8 {
     println!("{board}");
     let valid_choices = board.candidate_moves();
     println!("Available choices: {valid_choices:?}");
-    let choice= loop {
+    let choice = loop {
         print!(
             "{}",
             if board.current_player() == 0 {
@@ -18,14 +20,10 @@ pub fn human(board: &MancalaState) -> u8 {
         );
         std::io::stdout().flush().unwrap();
         let mut input = String::new();
-        std::io::stdin()
-            .read_line(&mut input)
-            .unwrap_or_else(
-                |_| {
-                    println!("Failed to read line. Please try again.");
-                    100
-                }
-            );
+        std::io::stdin().read_line(&mut input).unwrap_or_else(|_| {
+            println!("Failed to read line. Please try again.");
+            100
+        });
 
         let Ok(choice) = input.trim().parse() else {
             println!("Invalid choice. Please try again.");

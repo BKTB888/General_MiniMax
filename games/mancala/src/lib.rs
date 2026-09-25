@@ -1,6 +1,5 @@
 mod evaluation;
-pub mod state;
 mod player;
+pub mod state;
 
-pub use crate::evaluation::eval;
-pub use crate::player::human;
+pub use crate::{evaluation::eval, player::human};

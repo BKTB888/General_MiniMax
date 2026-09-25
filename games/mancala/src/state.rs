@@ -112,7 +112,10 @@ impl GameState for MancalaState {
     }
 
     fn undo(&mut self) {
-        self.board = self.board_stack.pop().expect("undo called with no move to undo");
+        self.board = self
+            .board_stack
+            .pop()
+            .expect("undo called with no move to undo");
         self.player = !self.player;
     }
 }
