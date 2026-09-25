@@ -7,25 +7,22 @@ use rand::{
 
 use crate::state::GameState;
 
-pub trait PlayerCreator<S: GameState>: Sync + Fn(u32) -> Box<dyn Player<S>> {}
-impl<S: GameState, F: Sync + Fn(u32) -> Box<dyn Player<S>>> PlayerCreator<S> for F {}
+pub trait PlayerCreator<S: GameState> = Sync + Fn(u32) -> Box<dyn Player<S>>;
 
-pub trait RngPlayer<S: GameState, P: Player<S>>: Sync + Fn(StdRng) -> P {}
-impl<S: GameState, F: Sync + Fn(StdRng) -> P, P: Player<S>> RngPlayer<S, P> for F {}
+pub trait RngPlayer<S: GameState, P: Player<S>> = Sync + Fn(StdRng) -> P;
 
-pub trait Player<S: GameState>: FnMut(&S) -> <S as GameState>::Choice {}
-impl<S: GameState, F: FnMut(&S) -> <S as GameState>::Choice> Player<S> for F {}
+pub trait Player<S: GameState> = FnMut(&S) -> S::Choice;
 
 pub fn human<S: GameState>(state: &S) -> S::Choice {
     loop {
-        println!("{}", state);
+        println!("{state}");
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)
             .expect("Failed to read line");
 
         if let Ok(choice) = input.trim().parse::<S::Choice>()
-            && state.is_valid(choice.clone())
+            && state.is_valid(choice)
         {
             return choice;
         }
@@ -34,7 +31,7 @@ pub fn human<S: GameState>(state: &S) -> S::Choice {
 
 /// A player that plays uniformly random candidate moves drawn from `rng`.
 pub fn randy<S: GameState>(mut rng: impl Rng) -> impl Player<S> {
-    move |state: &S| state.candidate_moves().choose(&mut rng).unwrap().clone()
+    move |state: &S| *state.candidate_moves().choose(&mut rng).unwrap()
 }
 
 /// Makes the player for game `game` by passing `rng_player` an RNG seeded from `seed` and

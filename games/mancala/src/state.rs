@@ -11,16 +11,20 @@ pub struct MancalaState {
     board: [u8; 14],
     player: bool,
     board_stack: Vec<[u8; 14]>,
+    // Moves only shift balls around, so this never changes.
+    total_balls: u16,
 }
 
 impl MancalaState {
     pub fn starting(with: u8) -> Self {
+        let board = [
+            with, with, with, 0, with, with, with, with, with, with, 0, with, with, with,
+        ];
         Self {
-            board: [
-                with, with, with, 0, with, with, with, with, with, with, 0, with, with, with,
-            ],
+            board,
             player: false,
             board_stack: Vec::new(),
+            total_balls: board.iter().map(|&b| u16::from(b)).sum(),
         }
     }
     const fn get_side_idxs(player: bool) -> [u8; 6] {
@@ -44,15 +48,7 @@ impl MancalaState {
     }
 
     pub fn balls_in_play(&self) -> u16 {
-        self.get_side(self.player)
-            .iter()
-            .map(|&x| x as u16)
-            .sum::<u16>()
-            + self
-                .get_side(!self.player)
-                .iter()
-                .map(|&x| x as u16)
-                .sum::<u16>()
+        self.total_balls - u16::from(self.board[3]) - u16::from(self.board[10])
     }
 }
 
@@ -93,11 +89,8 @@ impl GameState for MancalaState {
     fn get_result(&self) -> Option<GameResult> {
         const ZERO_ARRAY: [u8; 6] = [0u8; 6];
 
-        if self.get_side(true) == ZERO_ARRAY || self.get_side(false) == ZERO_ARRAY {
-            Some(GameResult::Player(!self.player as u8))
-        } else {
-            None
-        }
+        (self.get_side(true) == ZERO_ARRAY || self.get_side(false) == ZERO_ARRAY)
+            .then_some(GameResult::Player(!self.player as u8))
     }
 
     fn candidate_moves(&self) -> Vec<Self::Choice> {
@@ -137,7 +130,7 @@ impl Display for MancalaState {
                 3 | 10 => value.blue().bold(),
                 _ => value.black(),
             })
-            .map(|colored| write!(f, "{}", colored))
+            .map(|colored| write!(f, "{colored}"))
             .collect::<fmt::Result>()
     }
 }

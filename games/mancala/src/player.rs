@@ -4,9 +4,9 @@ use general_minimax::state::GameState;
 use crate::state::MancalaState;
 
 pub fn human(board: &MancalaState) -> u8 {
-    println!("{}", board);
+    println!("{board}");
     let valid_choices = board.candidate_moves();
-    println!("Available choices: {:?}", valid_choices);
+    println!("Available choices: {valid_choices:?}");
     let choice= loop {
         print!(
             "{}",
@@ -27,14 +27,10 @@ pub fn human(board: &MancalaState) -> u8 {
                 }
             );
 
-        let choice = input.trim().parse();
-
-        if choice.is_err() {
+        let Ok(choice) = input.trim().parse() else {
             println!("Invalid choice. Please try again.");
             continue;
-        }
-
-        let choice = choice.unwrap();
+        };
 
         if valid_choices.contains(&choice) {
             break choice;
@@ -44,6 +40,6 @@ pub fn human(board: &MancalaState) -> u8 {
     };
     let mut copy = board.clone();
     copy.make_move(choice);
-    println!("Result: {}\n", copy);
+    println!("Result: {copy}\n");
     choice
 }

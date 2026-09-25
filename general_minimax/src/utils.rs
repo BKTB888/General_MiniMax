@@ -36,7 +36,7 @@ pub fn node_ops<S: GameState>(
 
     group.bench_function("candidate_moves", |b| b.iter(|| state.candidate_moves()));
     group.bench_function("get_result", |b| b.iter(|| state.get_result()));
-    // Includes dropping the clone, as `alphabeta_tt` does for every child.
+    // Includes dropping the clone.
     group.bench_function("clone", |b| b.iter(|| state.clone()));
     group.bench_function("eval", |b| b.iter(|| eval(&state)));
     // Undoing restores `state`, so every iteration plays the same move.

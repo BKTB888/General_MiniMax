@@ -7,7 +7,7 @@ use std::{
 use colored::Colorize;
 use general_minimax::{
     coordinate::Coordinate,
-    mixers::xorshift,
+    mixers::Splitmix,
     result::{GameResult, get_player_color},
     state::GameState,
 };
@@ -18,16 +18,18 @@ pub type MapCoord = Coordinate<MapInt, MapInt>;
 type FixedMap<K, V> = HashMap<K, V, BuildHasherDefault<DefaultHasher>>;
 type Map = FixedMap<MapCoord, u8>;
 
-macro hash_type {
-    { $caller:tt } => {
-        general_minimax::tt_call::tt_return! {
-            $caller
-            type = [{ u32 }]
-        }
-    },
-    () => { u32 }
-}
-type HashType = hash_type!();
+/// One direction per line through a cell: vertical, horizontal and the two diagonals.
+pub const DIRS: [MapCoord; 4] = [
+    Coordinate(1, 0),
+    Coordinate(0, 1),
+    Coordinate(1, 1),
+    Coordinate(1, -1),
+];
+
+/// Empty cells drawn around `bounds` on every side.
+pub const BORDER: MapInt = 2;
+
+type HashType = u64;
 
 #[derive(Clone)]
 pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
@@ -72,17 +74,11 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
 
     fn make_move(&mut self, coord: Self::Choice) {
         if self.result.is_none() {
-            self.cells.insert(coord.into(), self.player);
-            self.hash ^= zobrist_cell_key(
-                coord.0 as HashType,
-                coord.1 as HashType,
-                self.player as HashType,
-            );
-            self.result = if self.has_won_from(coord) {
-                Some(GameResult::Player(self.player))
-            } else {
-                None
-            };
+            self.cells.insert(coord, self.player);
+            self.hash ^= zobrist_cell_key(coord, self.player);
+            self.result = self
+                .has_won_from(coord)
+                .then_some(GameResult::Player(self.player));
 
             self.player = (self.player + 1) % NUM_P;
             let prior_count = self.candidate_moves_with_counts.remove(&coord).unwrap_or(0);
@@ -123,26 +119,19 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
         self.cells.remove(&choice);
         self.player = self.player.checked_sub(1).unwrap_or(NUM_P - 1);
         self.result = None;
-        {
-            let (count, candidates) = &self.move_history_with_candidates[&choice];
-            candidates.iter().for_each(|&coord| {
-                if let Entry::Occupied(mut e) = self.candidate_moves_with_counts.entry(coord) {
-                    let count = e.get_mut();
-                    *count -= 1;
-                    if *count == 0 {
-                        e.remove();
-                    }
+        let (count, candidates) = self.move_history_with_candidates.remove(&choice).unwrap();
+        for coord in candidates {
+            if let Entry::Occupied(mut e) = self.candidate_moves_with_counts.entry(coord) {
+                let count = e.get_mut();
+                *count -= 1;
+                if *count == 0 {
+                    e.remove();
                 }
-            });
-            self.candidate_moves_with_counts.insert(choice, *count);
+            }
         }
+        self.candidate_moves_with_counts.insert(choice, count);
 
-        self.move_history_with_candidates.remove(&choice);
-        self.hash ^= zobrist_cell_key(
-            choice.0 as HashType,
-            choice.1 as HashType,
-            self.player as HashType,
-        );
+        self.hash ^= zobrist_cell_key(choice, self.player);
     }
 }
 
@@ -150,19 +139,25 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
     pub fn cells(&self) -> &Map {
         &self.cells
     }
+    /// The lowest and highest row and column holding a piece, as `(min, max)`. `(0, 0)` for
+    /// both on an empty board.
+    pub fn bounds(&self) -> (MapCoord, MapCoord) {
+        let mut coords = self.cells.keys().copied();
+        let Some(first) = coords.next() else {
+            return Default::default();
+        };
+        coords.fold((first, first), |(min, max), Coordinate(r, c)| {
+            (
+                Coordinate(min.0.min(r), min.1.min(c)),
+                Coordinate(max.0.max(r), max.1.max(c)),
+            )
+        })
+    }
     fn has_won_from(&self, from: MapCoord) -> bool {
-        use Coordinate as C;
-        const DIRS: [(MapCoord, MapCoord); 4] = [
-            (C(1, 0), C(-1, 0)),
-            (C(0, 1), C(0, -1)),
-            (C(1, 1), C(-1, -1)),
-            (C(1, -1), C(-1, 1)),
-        ];
-
-        for (dir_pos, dir_neg) in DIRS {
+        for axis in DIRS {
             let mut count = 1u8;
 
-            for dir in [dir_pos, dir_neg] {
+            for dir in [axis, -axis] {
                 let mut coord = from + dir;
                 while let Some(&cell) = self.cells.get(&coord) {
                     if cell != self.player {
@@ -181,7 +176,7 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
     }
     fn add_candidates(&mut self, from: MapCoord, prior_count: u16) {
         const R: MapInt = 1;
-        const NEIGHBOURS: [MapCoord; ((2 * R + 1).pow(2) - 1) as usize] = neighbour_offsets!(R);
+        const NEIGHBOURS: [MapCoord; ((2 * R + 1).pow(2) - 1) as usize] = neighbour_offsets(R);
 
         let candidates = NEIGHBOURS
             .iter()
@@ -200,35 +195,9 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
 }
 impl<const K: u8, const NUM_P: u8> Display for KInARowState<K, NUM_P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let max_r = self
-            .cells
-            .keys()
-            .map(|Coordinate(r, _)| *r)
-            .max()
-            .unwrap_or_default();
-        let max_c = self
-            .cells
-            .keys()
-            .map(|Coordinate(_, c)| *c)
-            .max()
-            .unwrap_or_default();
-        let min_r = self
-            .cells
-            .keys()
-            .map(|Coordinate(r, _)| *r)
-            .min()
-            .unwrap_or_default();
-        let min_c = self
-            .cells
-            .keys()
-            .map(|Coordinate(_, c)| *c)
-            .min()
-            .unwrap_or_default();
-
-        let bx = 2;
-        // Build board rows
-        for row in (min_r - bx..=max_r + bx).rev() {
-            for col in min_c - bx..=max_c + bx {
+        let (Coordinate(min_r, min_c), Coordinate(max_r, max_c)) = self.bounds();
+        for row in (min_r - BORDER..=max_r + BORDER).rev() {
+            for col in min_c - BORDER..=max_c + BORDER {
                 let coord = Coordinate(row, col);
                 if let Some(&player) = self.cells.get(&coord) {
                     // Choose a color for the player
@@ -383,6 +352,26 @@ mod tests {
     }
 
     #[test]
+    fn test_zobrist_no_xor_cancellation() {
+        let mut a = KIR5::default();
+        make_moves(&mut a, &[C(0, 0), C(1, 0), C(1, 1), C(0, 1)]);
+        let mut b = KIR5::default();
+        make_moves(&mut b, &[C(1, 0), C(0, 0), C(0, 1), C(1, 1)]); // owners swapped
+        assert_ne!(a.hash, b.hash);
+        assert_ne!(a.hash, KIR5::default().hash);
+        assert_ne!(b.hash, KIR5::default().hash);
+    }
+
+    #[test]
+    fn test_zobrist_distinct_with_negative_coords() {
+        let mut a = KIR5::default();
+        a.make_move(C(3, -1));
+        let mut b = KIR5::default();
+        b.make_move(C(5, -1));
+        assert_ne!(a.hash, b.hash);
+    }
+
+    #[test]
     fn test_undo_single_move_restores_default() {
         let original = KIR5::default();
         let mut s = KIR5::default();
@@ -490,27 +479,24 @@ mod tests {
     }
 }
 
-macro neighbour_offsets($r:expr) {{
-    const R: MapInt = $r;
-    const SIZE: usize = ((2 * R + 1) * (2 * R + 1) - 1) as usize;
-    let mut arr = [Coordinate(0, 0); SIZE];
+/// Every offset at most `r` away on both axes, except `(0, 0)`. `N` must be `(2r + 1)² - 1`.
+const fn neighbour_offsets<const N: usize>(r: MapInt) -> [MapCoord; N] {
+    let mut arr = [Coordinate(0, 0); N];
     let mut i = 0;
-    let mut a = -R;
-    while a <= R {
-        let mut b = -R;
-        while b <= R {
+    for a in -r..r + 1 {
+        for b in -r..r + 1 {
             if a != 0 || b != 0 {
                 arr[i] = Coordinate(a, b);
                 i += 1;
             }
-            b += 1;
         }
-        a += 1;
     }
     arr
-}}
+}
 
-const fn zobrist_cell_key(col: HashType, row: HashType, player: HashType) -> HashType {
-    let idx = col << 16 | row << 8 | player;
-    xorshift!(idx + 1, hash_type!())
+const fn zobrist_cell_key(coord: MapCoord, player: u8) -> HashType {
+    // `as u16` keeps negatives to their own 16 bits instead of sign-extending over the others.
+    let idx = (coord.0 as u16 as u64) << 32 | (coord.1 as u16 as u64) << 16 | player as u64;
+    // Splitmix, not xorshift: a linear mixer lets keys XOR-cancel across cells.
+    idx.splitmix()
 }

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, rc::Rc, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use rayon::{iter::ParallelIterator, prelude::IntoParallelIterator};
 
@@ -6,10 +9,9 @@ use crate::{
     player::{
         evals::Evaluation,
         players::Player,
-        search::EvalResult::{Draw, Loss, Win},
+        search::EvalResult::{Loss, Win},
         transposition_table::{TTBound, TTEntry},
     },
-    result::GameResult,
     state::GameState,
 };
 
@@ -84,15 +86,11 @@ pub trait ABSearch<S: GameState>: Fn(&mut S, u8, EvalResult, EvalResult) -> Eval
         Self: Sized,
     {
         move |state| {
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             let mut depth = 0;
             let (mut game_move, mut result) = self.find_best(&mut state.clone(), depth);
 
-            loop {
-                if start.elapsed() >= duration || result.is_terminal() {
-                    break;
-                }
-
+            while start.elapsed() < duration && !result.is_terminal() {
                 depth += 1;
                 (game_move, result) = self.find_best(&mut state.clone(), depth);
             }
@@ -120,16 +118,8 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
         beta: EvalResult,
         eval: &impl Evaluation<S>,
     ) -> EvalResult {
-        if let Some(result) = state.get_result() {
-            return if let GameResult::Player(player) = result {
-                if player == state.current_player() {
-                    Win
-                } else {
-                    Loss
-                }
-            } else {
-                Draw
-            };
+        if let Some(result) = EvalResult::terminal(state) {
+            return result;
         }
 
         if depth == 0 {
@@ -151,33 +141,24 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
         -alpha
     }
 
-    move |state, depth, alpha, beta| recursive(&mut state.clone(), depth, alpha, beta, &eval)
+    move |state, depth, alpha, beta| recursive(state, depth, alpha, beta, &eval)
 }
 
-//Todo: minusing is not perfect
 pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
-    struct Helper<S: GameState, E: Evaluation<S>> {
-        eval: Rc<E>,
+    struct Helper<'a, S: GameState, E: Evaluation<S>> {
+        eval: &'a E,
         table: HashMap<<S as GameState>::Hash, TTEntry>,
     }
-    impl<S: GameState, E: Evaluation<S>> Helper<S, E> {
+    impl<'a, S: GameState, E: Evaluation<S>> Helper<'a, S, E> {
         fn search(
             &mut self,
-            state: &S,
+            state: &mut S,
             depth: u8,
             mut alpha: EvalResult,
             mut beta: EvalResult,
         ) -> EvalResult {
-            if let Some(result) = state.get_result() {
-                return if let GameResult::Player(player) = result {
-                    if player == state.current_player() {
-                        Win
-                    } else {
-                        Loss
-                    }
-                } else {
-                    Draw
-                };
+            if let Some(result) = EvalResult::terminal(state) {
+                return result;
             }
 
             if depth == 0 {
@@ -187,35 +168,36 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             let alpha_orig = alpha;
             let state_hash = state.hash();
 
-            if let Some(entry) = self.table.get(&state_hash) {
-                if entry.depth >= depth {
-                    match entry.bound {
-                        TTBound::Exact => return entry.value,
-                        TTBound::Lower => {
-                            if entry.value <= beta {
-                                //println!("Hit: {:#?}", entry);
-                                return -beta;
-                            }
-                            if entry.value < alpha {
-                                alpha = entry.value;
-                            }
+            if let Some(entry) = self.table.get(&state_hash)
+                && entry.depth >= depth
+            {
+                // Stored as this node's result; `alpha` and `beta` compare child scores, its negation.
+                let value = -entry.value;
+                match entry.bound {
+                    TTBound::Exact => return entry.value,
+                    TTBound::Lower => {
+                        if value <= beta {
+                            return -beta;
                         }
-                        TTBound::Upper => {
-                            if entry.value >= alpha {
-                                return -alpha;
-                            }
-                            if entry.value < beta {
-                                beta = entry.value;
-                            }
+                        if value < alpha {
+                            alpha = value;
+                        }
+                    }
+                    TTBound::Upper => {
+                        if value >= alpha {
+                            return -alpha;
+                        }
+                        if value > beta {
+                            beta = value;
                         }
                     }
                 }
             }
 
             for game_move in state.candidate_moves() {
-                let mut next = state.clone();
-                next.make_move(game_move);
-                let score = self.search(&next, depth - 1, -beta, -alpha);
+                state.make_move(game_move);
+                let score = self.search(state, depth - 1, -beta, -alpha);
+                state.undo();
                 if score <= beta {
                     beta = -beta;
                     self.table.insert(
@@ -253,7 +235,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             alpha
         }
 
-        pub fn new(eval: Rc<E>) -> Self {
+        pub fn new(eval: &'a E) -> Self {
             Helper {
                 eval,
                 table: HashMap::new(),
@@ -261,125 +243,13 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
         }
     }
 
-    let rc_eval = Rc::new(eval);
-
-    move |state, depth, alpha, beta| Helper::new(rc_eval.clone()).search(state, depth, alpha, beta)
+    move |state, depth, alpha, beta| Helper::new(&eval).search(state, depth, alpha, beta)
 }
-/*
-struct AlphaBeta<S: GameState, E: Evaluation<S>> {
-    eval: E,
-    table: HashMap<<S as GameState>::Hash, TTEntry>,
-}
-
-impl<S: GameState, E: Evaluation<S>> AlphaBeta<S, E> {
-    fn new(eval: E) -> Self {
-        AlphaBeta { eval, table: HashMap::new() }
-    }
-
-    fn search(
-        &mut self,
-        state: &S,
-        depth: u8,
-        mut alpha: EvalResult,
-        mut beta: EvalResult,
-    ) -> EvalResult {
-        if let Some(result) = state.get_result() {
-            return if let GameResult::Player(player) = result {
-                if player == state.current_player() {
-                    Win
-                } else {
-                    Loss
-                }
-            } else {
-                Draw
-            };
-        }
-
-        if depth == 0 {
-            return self.eval(state);
-        }
-
-        let alpha_orig = alpha;
-        let key = state.hash();
-
-        if let Some(entry) = self.table.get(&key) {
-            if entry.depth >= depth {
-                match entry.bound {
-                    TTBound::Exact => return entry.value,
-                    TTBound::Lower => {
-                        if entry.value >= beta {
-                            return beta;
-                        }
-                        if entry.value > alpha {
-                            alpha = entry.value;
-                        }
-                    }
-                    TTBound::Upper => {
-                        if entry.value <= alpha {
-                            return alpha;
-                        }
-                        if entry.value < beta {
-                            beta = entry.value;
-                        }
-                    }
-                }
-            }
-        }
-
-        for game_move in state.candidate_moves() {
-            let mut next = state.clone();
-            next.make_move(game_move);
-            let score = -self.search(&next, depth - 1, -beta, -alpha);
-            if score >= beta {
-                self.table.insert(
-                    key,
-                    TTEntry {
-                        depth,
-                        value: beta,
-                        bound: TTBound::Lower,
-                    },
-                );
-                return beta; // beta cutoff
-            }
-            if score > alpha {
-                alpha = score;
-            }
-        }
-
-        let bound = if alpha == alpha_orig {
-            TTBound::Upper
-        } else {
-            TTBound::Exact
-        };
-        self.table.insert(
-            key,
-            TTEntry {
-                depth,
-                value: alpha,
-                bound,
-            },
-        );
-
-        alpha
-    }
-
-
-}
-
- */
 
 pub fn minimax<S: GameState>(eval: impl Evaluation<S>) -> impl Search<S> {
     fn recursive<S: GameState>(state: &mut S, depth: u8, eval: &impl Evaluation<S>) -> EvalResult {
-        if let Some(result) = state.get_result() {
-            return if let GameResult::Player(player) = result {
-                if player == state.current_player() {
-                    Win
-                } else {
-                    Loss
-                }
-            } else {
-                Draw
-            };
+        if let Some(result) = EvalResult::terminal(state) {
+            return result;
         }
 
         if depth == 0 {

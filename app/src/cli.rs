@@ -15,7 +15,7 @@ use mega_tictactoe::{evaluation::eval_kinrow, player::human_kinrow, state::KInAR
 #[derive(Parser)]
 pub struct CLI {
     game: GameKind,
-    /// human, randy[:<seed>], alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms per move> or iterative-tt:<ms per move>
+    /// human, randy[:<seed>], minimax:<depth>, alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms per move> or iterative-tt:<ms per move>
     #[arg(long, default_value = "human")]
     p1: PlayerKind,
     /// Same values as `--p1`.

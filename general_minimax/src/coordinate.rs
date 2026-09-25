@@ -71,11 +71,11 @@ impl<X: FromStr, Y: FromStr> FromStr for Coordinate<X, Y> {
         let x = x
             .trim()
             .parse()
-            .map_err(|_| ParseCoordinateError(format!("invalid x: {}", x)))?;
+            .map_err(|_| ParseCoordinateError(format!("invalid x: {x}")))?;
         let y = y
             .trim()
             .parse()
-            .map_err(|_| ParseCoordinateError(format!("invalid y: {}", y)))?;
+            .map_err(|_| ParseCoordinateError(format!("invalid y: {y}")))?;
 
         Ok(Coordinate(x, y))
     }

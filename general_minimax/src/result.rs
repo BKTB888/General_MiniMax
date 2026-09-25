@@ -17,13 +17,7 @@ impl Display for GameResult {
 impl GameResult {
     fn get_colored(&self) -> ColoredString {
         if let GameResult::Player(player) = self {
-            format!("Player {}", player + 1).color(match player {
-                0 => Color::Red,
-                1 => Color::Blue,
-                2 => Color::Green,
-                3 => Color::Magenta,
-                _ => color_from_id(*player),
-            })
+            format!("Player {}", player + 1).color(get_player_color(*player))
         } else {
             "Draw".color(Color::White)
         }
@@ -31,7 +25,7 @@ impl GameResult {
 
     pub fn print(&self) {
         if let GameResult::Player(_) = self {
-            println!("{} won!", self);
+            println!("{self} won!");
         } else {
             println!("It's a draw!");
         }

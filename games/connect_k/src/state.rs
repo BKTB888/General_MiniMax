@@ -1,60 +1,36 @@
-use std::{
-    cmp::min,
-    fmt::{Display, Formatter},
-    hash::{Hash, Hasher},
-};
+use std::fmt::{Display, Formatter};
 
 use colored::Colorize;
 use general_minimax::{
     AS_USIZE,
-    mixers::xorshift,
+    coordinate::Coordinate as C,
+    mixers::Splitmix,
     result::{GameResult, get_player_color},
     state::GameState,
 };
 
-macro hash_type {
-    { $caller:tt } => {
-        general_minimax::tt_call::tt_return! {
-            $caller
-            type = [{ u32 }]
-        }
-    },
-    () => { u32 }
-}
-type HashType = hash_type!();
+type HashType = u32;
+/// `(col, row)`, signed so it can step off the board.
+type Pos = C<isize, isize>;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2> {
-    cells: [[Option<u8>; AS_USIZE::<N>]; AS_USIZE::<M>],
+    cells: [[Option<u8>; AS_USIZE::<N>]; AS_USIZE::<M>] = [[None; AS_USIZE::<N>]; AS_USIZE::<M>],
     player: u8,
 
-    choices: [u8; AS_USIZE::<M>],
+    choices: [u8; AS_USIZE::<M>] = [0; AS_USIZE::<M>],
     result: Option<GameResult>,
     hash: HashType,
     move_stack: Vec<u8>,
-}
-
-impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Default
-    for ConnectKState<N, M, K, NUM_P>
-{
-    fn default() -> Self {
-        Self {
-            cells: [[None; AS_USIZE::<N>]; AS_USIZE::<M>],
-            player: 0,
-            choices: [0; AS_USIZE::<M>],
-            result: None,
-            hash: 0,
-            move_stack: Vec::new(),
-        }
-    }
 }
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Display
     for ConnectKState<N, M, K, NUM_P>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Top border
-        writeln!(f, "┌{}┐", "───┬".repeat(M as usize - 1) + "───")?;
+        let border =
+            |left, mid, right| format!("{left}{}{right}", vec!["───"; M as usize].join(mid));
+        writeln!(f, "{}", border("┌", "┬", "┐"))?;
 
         for row in (0..N as usize).rev() {
             write!(f, "│")?;
@@ -62,7 +38,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Display
                 match self.cells[col][row] {
                     Some(player) => {
                         let disc = " ● ".color(get_player_color(player));
-                        write!(f, "{}│", disc)?;
+                        write!(f, "{disc}│")?;
                     }
                     None => write!(f, " · │")?,
                 }
@@ -70,12 +46,11 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Display
             writeln!(f)?;
 
             if row > 0 {
-                writeln!(f, "├{}┤", "───┼".repeat(M as usize - 1) + "───")?;
+                writeln!(f, "{}", border("├", "┼", "┤"))?;
             }
         }
 
-        // Bottom border
-        writeln!(f, "└{}┘", "───┴".repeat(M as usize - 1) + "───")?;
+        writeln!(f, "{}", border("└", "┴", "┘"))?;
 
         // Column indices
         write!(f, " ")?;
@@ -155,147 +130,50 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
 
 impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> ConnectKState<N, M, K, NUM_P> {
     fn check_result(&self, col: usize) -> Option<GameResult> {
-        if self.choices.iter().all(|&h| h == N) {
-            return Some(GameResult::Draw);
-        }
+        let height = self.choices[col];
+        let at = C(col as isize, height as isize - 1);
 
-        let col_size = self.choices[col];
-        let row = (col_size - 1) as usize;
+        // Nothing is above the new piece, so a vertical line is the top `K` cells of its column.
+        let vertical = height >= K
+            && self.cells[col][(height - K) as usize..height as usize]
+                .iter()
+                .all(|&cell| cell == Some(self.player));
+        const AXES: [Pos; 3] = [C(1, 0), C(1, 1), C(1, -1)];
+        let won = vertical
+            || AXES.into_iter().any(|dir| {
+                let ahead = self.run(at, dir);
+                ahead == K - 1 || 1 + ahead + self.run(at, -dir) >= K
+            });
+        let full = self.choices.iter().all(|&h| h == N);
 
-        //Check ↓
-        if col_size >= K
-            // All cells in the col are filled with current player
-            && self.cells[col][(col_size - K) as usize..=row]
-            .iter()
-            .all(|&cell| cell == Some(self.player))
-        {
-            return Some(GameResult::Player(self.player));
-        }
+        won.then_some(GameResult::Player(self.player))
+            .or(full.then_some(GameResult::Draw))
+    }
 
-        //Count ─
-        let mut in_row = 1;
-
-        //Count cols →
-        let max = min(col as u8 + K, M) as usize;
-        for current_col in self.cells[col..max].iter().skip(1) {
-            if current_col[row] == Some(self.player) {
-                in_row += 1;
-            } else {
-                break;
+    /// How many of `self.player`'s cells follow `at` in a row, stepping by `dir`.
+    /// Stops at `K - 1`, the most a win needs.
+    fn run(&self, mut at: Pos, dir: Pos) -> u8 {
+        for n in 0..K - 1 {
+            at += dir;
+            if self.cell(at) != Some(self.player) {
+                return n;
             }
         }
+        K - 1
+    }
 
-        if in_row >= K {
-            return Some(GameResult::Player(self.player));
-        }
-
-        //Count cols ←
-        let min = (col as u8).saturating_sub(K) as usize;
-        for current_col in self.cells[min..col].iter().rev() {
-            if current_col[row] == Some(self.player) {
-                in_row += 1;
-            } else {
-                break;
-            }
-        }
-
-        if in_row >= K {
-            return Some(GameResult::Player(self.player));
-        }
-
-        //Count /
-        let mut in_diag = 1;
-
-        //Count ↗
-        loop {
-            if in_diag >= K {
-                return Some(GameResult::Player(self.player));
-            }
-            let col = col + in_diag as usize;
-            let row = row + in_diag as usize;
-
-            if self.cells.get(col).is_some_and(|column| {
-                column
-                    .get(row)
-                    .is_some_and(|&cell| cell == Some(self.player))
-            }) {
-                in_diag += 1;
-            } else {
-                break;
-            }
-        }
-
-        //Count ↙
-        let mut current = 1;
-        loop {
-            if in_diag >= K {
-                return Some(GameResult::Player(self.player));
-            }
-            let col = col.wrapping_sub(current);
-            let row = row.wrapping_sub(current);
-
-            if self.cells.get(col).is_some_and(|column| {
-                column
-                    .get(row)
-                    .is_some_and(|&cell| cell == Some(self.player))
-            }) {
-                in_diag += 1;
-                current += 1;
-            } else {
-                break;
-            }
-        }
-
-        //Count \
-        in_diag = 1;
-
-        //Count ↘
-        loop {
-            if in_diag >= K {
-                return Some(GameResult::Player(self.player));
-            }
-            let col = col.wrapping_sub(in_diag as usize);
-            let row = row + in_diag as usize;
-
-            if self.cells.get(col).is_some_and(|column| {
-                column
-                    .get(row)
-                    .is_some_and(|&cell| cell == Some(self.player))
-            }) {
-                in_diag += 1;
-            } else {
-                break;
-            }
-        }
-
-        //Count ↖
-        current = 1;
-        loop {
-            if in_diag >= K {
-                return Some(GameResult::Player(self.player));
-            }
-            let col = col + current;
-            let row = row.wrapping_sub(current);
-
-            if self.cells.get(col).is_some_and(|column| {
-                column
-                    .get(row)
-                    .is_some_and(|&cell| cell == Some(self.player))
-            }) {
-                in_diag += 1;
-                current += 1;
-            } else {
-                break;
-            }
-        }
-
-        None
+    /// The owner of the cell at `(col, row)`, or `None` if it's empty or off the board.
+    fn cell(&self, C(col, row): Pos) -> Option<u8> {
+        *self
+            .cells
+            .get(usize::try_from(col).ok()?)?
+            .get(usize::try_from(row).ok()?)?
     }
 }
 
 const fn zobrist_cell_key(col: HashType, row: HashType, player: HashType) -> HashType {
-    let idx = col << 16 | row << 8 | player;
-    xorshift!(idx + 1, hash_type!())
+    // Splitmix, not xorshift: a linear mixer lets keys XOR-cancel across cells.
+    (col << 16 | row << 8 | player).splitmix()
 }
 
 #[cfg(test)]
@@ -459,6 +337,14 @@ mod tests {
         assert_eq!(state.get_result(), Some(GameResult::Draw));
     }
 
+    #[test]
+    fn test_win_on_last_cell_is_not_draw() {
+        type OneRow = ConnectKState<1, 3, 2>;
+        let mut state = OneRow::default();
+        make_moves(&mut state, &[0, 2, 1]); // p0 fills the board with (0,0),(1,0)
+        assert_eq!(state.get_result(), Some(GameResult::Player(0)));
+    }
+
     // --- Result is sticky after game ends ---
 
     #[test]
@@ -525,6 +411,17 @@ mod tests {
         let mut b = C4::default();
         b.make_move(1);
         assert_ne!(a.hash, b.hash);
+    }
+
+    #[test]
+    fn test_zobrist_no_xor_cancellation() {
+        let mut a = C4::default();
+        make_moves(&mut a, &[0, 1, 1, 0]); // p0 (0,0),(1,1); p1 (1,0),(0,1)
+        let mut b = C4::default();
+        make_moves(&mut b, &[1, 0, 0, 1]); // p0 (1,0),(0,1); p1 (0,0),(1,1)
+        assert_ne!(a.hash, b.hash);
+        assert_ne!(a.hash, C4::default().hash);
+        assert_ne!(b.hash, C4::default().hash);
     }
 
     // --- Undo ---

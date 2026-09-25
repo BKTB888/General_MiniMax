@@ -1,5 +1,4 @@
-#![feature(decl_macro)]
-#![feature(const_trait_impl)]
+#![feature(const_trait_impl, const_iter)]
 
 pub mod evaluation;
 pub mod player;

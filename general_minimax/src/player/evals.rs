@@ -8,6 +8,7 @@ use crate::{
             EvalResult::{Draw, Loss, Score, Win},
         },
     },
+    result::GameResult,
     state::GameState,
 };
 
@@ -34,6 +35,15 @@ pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send + Sync {
 impl<S: GameState, F: Fn(&S) -> EvalResult + Send + Sync> Evaluation<S> for F {}
 
 impl EvalResult {
+    /// The finished game's result for the player to move, or `None` while it's still going.
+    pub fn terminal<S: GameState>(state: &S) -> Option<Self> {
+        Some(match state.get_result()? {
+            GameResult::Player(player) if player == state.current_player() => Win,
+            GameResult::Player(_) => Loss,
+            GameResult::Draw => Draw,
+        })
+    }
+
     pub fn is_terminal(&self) -> bool {
         matches!(self, Win | Loss | Draw)
     }

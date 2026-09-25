@@ -422,10 +422,10 @@ name = "general_minimax"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "connect_k",
  "criterion",
  "rand",
  "rayon",
- "tt-call",
 ]
 
 [[package]]
@@ -941,12 +941,6 @@ dependencies = [
  "serde",
  "serde_json",
 ]
-
-[[package]]
-name = "tt-call"
-version = "1.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f195fd851901624eee5a58c4bb2b4f06399148fcd0ed336e6f1cb60a9881df"
 
 [[package]]
 name = "unicode-ident"

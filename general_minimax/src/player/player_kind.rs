@@ -6,7 +6,7 @@ use crate::{
     player::{
         evals::Evaluation,
         players::{Player, PlayerCreator, creator_from_seed, randy},
-        search::{ABSearch, alphabeta, alphabeta_tt},
+        search::{ABSearch, Search, alphabeta, alphabeta_tt, minimax},
     },
     state::GameState,
 };
@@ -16,6 +16,8 @@ pub enum PlayerKind {
     Human,
     /// Random moves, reproducible when seeded.
     Randy(Option<u64>),
+    /// Full search without pruning, spread over all cores.
+    Minimax(u8),
     Alphabeta(u8),
     /// Alphabeta with a transposition table.
     AlphabetaTT(u8),
@@ -38,13 +40,14 @@ impl FromStr for PlayerKind {
             "randy" => Ok(PlayerKind::Randy(
                 arg.map(|_| number(name, arg)).transpose()?,
             )),
+            "minimax" => Ok(PlayerKind::Minimax(number(name, arg)?)),
             "alphabeta" => Ok(PlayerKind::Alphabeta(number(name, arg)?)),
             "alphabeta-tt" => Ok(PlayerKind::AlphabetaTT(number(name, arg)?)),
             "iterative" => Ok(PlayerKind::Iterative(number(name, arg)?)),
             "iterative-tt" => Ok(PlayerKind::IterativeTT(number(name, arg)?)),
             _ => Err(format!(
-                "unknown player `{name}`, expected human, randy[:<seed>], alphabeta:<depth>, \
-                 alphabeta-tt:<depth>, iterative:<ms> or iterative-tt:<ms>"
+                "unknown player `{name}`, expected human, randy[:<seed>], minimax:<depth>, \
+                 alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms> or iterative-tt:<ms>"
             )),
         }
     }
@@ -58,29 +61,30 @@ impl PlayerKind {
         eval: impl Evaluation<S> + Copy + 'static,
         human: fn(&S) -> S::Choice,
     ) -> Box<dyn PlayerCreator<S>> {
-        // The casts make every closure return exactly `Box<dyn Player<S>>`, as `PlayerCreator` needs.
         match self {
-            PlayerKind::Human => Box::new(move |_: u32| Box::new(human) as Box<dyn Player<S>>),
-            PlayerKind::Randy(None) => {
-                Box::new(|_: u32| Box::new(randy(rng())) as Box<dyn Player<S>>)
-            }
+            PlayerKind::Human => every_game(move || human),
+            PlayerKind::Randy(None) => every_game(|| randy(rng())),
             PlayerKind::Randy(Some(seed)) => Box::new(creator_from_seed(seed, randy)),
-            PlayerKind::Alphabeta(depth) => Box::new(move |_: u32| {
-                Box::new(alphabeta(eval).to_player(depth)) as Box<dyn Player<S>>
-            }),
-            PlayerKind::AlphabetaTT(depth) => Box::new(move |_: u32| {
-                Box::new(alphabeta_tt(eval).to_player(depth)) as Box<dyn Player<S>>
-            }),
-            PlayerKind::Iterative(ms) => Box::new(move |_: u32| {
-                Box::new(alphabeta(eval).with_iterative(Duration::from_millis(ms)))
-                    as Box<dyn Player<S>>
-            }),
-            PlayerKind::IterativeTT(ms) => Box::new(move |_: u32| {
-                Box::new(alphabeta_tt(eval).with_iterative(Duration::from_millis(ms)))
-                    as Box<dyn Player<S>>
-            }),
+            PlayerKind::Minimax(depth) => every_game(move || minimax(eval).to_player(depth)),
+            PlayerKind::Alphabeta(depth) => every_game(move || alphabeta(eval).to_player(depth)),
+            PlayerKind::AlphabetaTT(depth) => {
+                every_game(move || alphabeta_tt(eval).to_player(depth))
+            }
+            PlayerKind::Iterative(ms) => {
+                every_game(move || alphabeta(eval).with_iterative(Duration::from_millis(ms)))
+            }
+            PlayerKind::IterativeTT(ms) => {
+                every_game(move || alphabeta_tt(eval).with_iterative(Duration::from_millis(ms)))
+            }
         }
     }
+}
+
+/// A creator that ignores the game index and makes each game's player with `make`.
+fn every_game<S: GameState, P: Player<S> + 'static>(
+    make: impl Fn() -> P + Sync + 'static,
+) -> Box<dyn PlayerCreator<S>> {
+    Box::new(move |_| Box::new(make()) as Box<dyn Player<S>>)
 }
 
 /// Parses the number after `name:`, with errors naming the player.

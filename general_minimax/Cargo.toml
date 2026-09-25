@@ -7,8 +7,10 @@ edition.workspace = true
 colored.workspace = true
 rand.workspace = true
 rayon.workspace = true
-tt-call = "1"
 criterion = { workspace = true, optional = true }
+
+[dev-dependencies]
+connect_k.workspace = true
 
 [features]
 bench = ["dep:criterion"]

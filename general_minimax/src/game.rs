@@ -89,7 +89,11 @@ pub fn play_multiple<S: GameState>(
         (0..num_games).map(play_game).fold(BTreeMap::new(), count)
     };
 
-    Stats::new(results, now.elapsed(), num_games)
+    Stats {
+        results,
+        elapsed: now.elapsed(),
+        num_games,
+    }
 }
 
 fn count(mut counts: BTreeMap<GameResult, u32>, result: GameResult) -> BTreeMap<GameResult, u32> {
@@ -104,14 +108,6 @@ pub struct Stats {
 }
 
 impl Stats {
-    fn new(results: BTreeMap<GameResult, u32>, elapsed: Duration, num_games: u32) -> Self {
-        Self {
-            results,
-            elapsed,
-            num_games,
-        }
-    }
-
     pub fn print(&self) {
         for (result, &count) in &self.results {
             println!(

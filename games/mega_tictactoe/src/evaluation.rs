@@ -1,13 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use general_minimax::{
     player::search::{EvalResult, EvalResult::Score},
     state::GameState,
 };
 
-use crate::state::{KInARowState, MapCoord, MapInt};
-
-const DIRS: [(MapInt, MapInt); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
+use crate::state::{DIRS, KInARowState, MapCoord};
 
 /// For a given player, sum score² over all maximal unblocked runs in every direction.
 /// A run is "unblocked" on one end if the cell beyond it is empty (not occupied by the opponent).
@@ -15,7 +13,7 @@ fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, pl
     let cells = state.cells();
 
     // Track which (coord, dir_index) pairs we've already counted
-    let mut visited: BTreeMap<(MapCoord, usize), bool> = BTreeMap::new();
+    let mut visited: BTreeSet<(MapCoord, usize)> = BTreeSet::new();
     let mut total = 0.0f32;
 
     for (&start, &owner) in cells.iter() {
@@ -24,7 +22,7 @@ fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, pl
         }
 
         for (dir_idx, &dir) in DIRS.iter().enumerate() {
-            let neg_dir = (-dir.0, -dir.1);
+            let neg_dir = -dir;
 
             // Walk back to the true start of this run
             let mut run_start = start;
@@ -32,10 +30,9 @@ fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, pl
                 run_start += neg_dir;
             }
 
-            if visited.contains_key(&(run_start, dir_idx)) {
+            if !visited.insert((run_start, dir_idx)) {
                 continue;
             }
-            visited.insert((run_start, dir_idx), true);
 
             // Count run length
             let mut len = 0u8;
