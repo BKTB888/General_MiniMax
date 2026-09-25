@@ -21,7 +21,8 @@ type Connect4 = ConnectKState<7, 6>;
 /// table one also deepened iteratively from depth 0, and minimax, which runs on rayon so its
 /// time depends on free cores.
 fn search(c: &mut Criterion) {
-    let mut state: Connect4 = position(0, 8);
+    // Undecided through depth 8, so no benched depth ends at a proven result.
+    let mut state: Connect4 = position(1, 8);
     let plain = alphabeta(stupid_eval);
 
     let mut group = c.benchmark_group("connect4");
