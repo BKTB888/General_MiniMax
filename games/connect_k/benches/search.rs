@@ -17,8 +17,9 @@ use general_minimax::{
 
 type Connect4 = ConnectKState<7, 6>;
 
-/// One root search at a fixed depth: alphabeta with and without the transposition table, and
-/// minimax, which runs on rayon so its time depends on free cores.
+/// Root searches to a fixed depth: alphabeta with and without the transposition table, the
+/// table one also deepened iteratively from depth 0, and minimax, which runs on rayon so its
+/// time depends on free cores.
 fn search(c: &mut Criterion) {
     let mut state: Connect4 = position(0, 8);
     let plain = alphabeta(stupid_eval);
@@ -32,6 +33,15 @@ fn search(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
             // A fresh table every iteration; a kept one would already hold this search.
             b.iter(|| alphabeta_tt(stupid_eval).find_best(&mut state, depth))
+        });
+        group.bench_function(BenchmarkId::new("alphabeta_tt_iterative", depth), |b| {
+            // A fresh table every iteration, kept across the depths like `with_iterative` does.
+            b.iter(|| {
+                let search = alphabeta_tt(stupid_eval);
+                for d in 0..=depth {
+                    search.find_best(&mut state, d);
+                }
+            })
         });
         let mut mm = minimax(stupid_eval).to_player(depth);
         group.bench_function(BenchmarkId::new("minimax", depth), |b| {
