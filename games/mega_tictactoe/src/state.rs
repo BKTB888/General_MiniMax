@@ -70,6 +70,7 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
     // Unbounded on an infinite board.
     type Moves = Vec<Self::Choice>;
     const NUM_P: u8 = NUM_P;
+    const TT_BITS: u8 = 18;
 
     fn make_move(&mut self, coord: Self::Choice) {
         if self.result.is_none() {
@@ -111,6 +112,10 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
 
     fn hash(&self) -> u64 {
         self.hash
+    }
+
+    fn ply(&self) -> u32 {
+        self.move_stack.len() as u32
     }
 
     fn undo(&mut self) {

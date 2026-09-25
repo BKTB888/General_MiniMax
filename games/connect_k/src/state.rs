@@ -72,6 +72,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
     type Choice = u8;
     type Moves = ArrayVec<u8, { AS_USIZE::<M> }>;
     const NUM_P: u8 = NUM_P;
+    const TT_BITS: u8 = 16;
 
     fn make_move(&mut self, choice: Self::Choice) {
         if self.result.is_none() {
@@ -114,6 +115,10 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
 
     fn hash(&self) -> u64 {
         self.hash
+    }
+
+    fn ply(&self) -> u32 {
+        self.move_stack.len() as u32
     }
 
     fn undo(&mut self) {
