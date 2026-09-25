@@ -57,25 +57,17 @@ impl<X: Display, Y: Display> Display for Coordinate<X, Y> {
 }
 
 #[derive(Debug)]
-pub struct ParseCoordinateError(String);
+pub struct ParseCoordinateError;
 impl<X: FromStr, Y: FromStr> FromStr for Coordinate<X, Y> {
     type Err = ParseCoordinateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim().trim_start_matches('(').trim_end_matches(')');
 
-        let (x, y) = s.split_once(',').ok_or_else(|| {
-            ParseCoordinateError(format!("expected comma-separated pair, got: {s}"))
-        })?;
+        let (x, y) = s.split_once(',').ok_or(ParseCoordinateError)?;
 
-        let x = x
-            .trim()
-            .parse()
-            .map_err(|_| ParseCoordinateError(format!("invalid x: {x}")))?;
-        let y = y
-            .trim()
-            .parse()
-            .map_err(|_| ParseCoordinateError(format!("invalid y: {y}")))?;
+        let x = x.trim().parse().map_err(|_| ParseCoordinateError)?;
+        let y = y.trim().parse().map_err(|_| ParseCoordinateError)?;
 
         Ok(Coordinate(x, y))
     }
