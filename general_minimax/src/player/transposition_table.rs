@@ -5,33 +5,39 @@ use std::{
 
 use crate::player::search::EvalResult;
 
-pub struct TTable {
+/// Search results keyed by position hash, with `C` the game's choice type.
+pub struct TTable<C> {
     // Keys are already mixed Zobrist hashes, so the map uses them as they are.
-    entries: HashMap<u64, TTEntry, BuildHasherDefault<PassHasher>>,
+    entries: HashMap<u64, TTEntry<C>, BuildHasherDefault<PassHasher>>,
 }
 
-impl TTable {
+impl<C: Copy> TTable<C> {
     pub fn new() -> Self {
         Self {
             entries: HashMap::default(),
         }
     }
 
-    /// The entry for `hash` if it was searched at least `depth` deep.
-    pub fn get(&self, hash: u64, depth: u8) -> Option<TTEntry> {
-        self.entries
-            .get(&hash)
-            .copied()
-            .filter(|entry| entry.depth >= depth)
+    /// The entry stored for `hash`.
+    pub fn get(&self, hash: u64) -> Option<TTEntry<C>> {
+        self.entries.get(&hash).copied()
     }
 
-    pub fn store(&mut self, hash: u64, depth: u8, value: EvalResult, bound: TTBound) {
+    pub fn store(
+        &mut self,
+        hash: u64,
+        depth: u8,
+        value: EvalResult,
+        bound: TTBound,
+        best_move: Option<C>,
+    ) {
         self.entries.insert(
             hash,
             TTEntry {
                 depth,
                 value,
                 bound,
+                best_move,
             },
         );
     }
@@ -62,8 +68,10 @@ pub enum TTBound {
     Upper,
 }
 #[derive(Copy, Clone, Debug)]
-pub struct TTEntry {
-    depth: u8,
+pub struct TTEntry<C> {
+    pub(crate) depth: u8,
     pub(crate) value: EvalResult,
     pub(crate) bound: TTBound,
+    /// The move to search first.
+    pub(crate) best_move: Option<C>,
 }

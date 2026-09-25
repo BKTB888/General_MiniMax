@@ -146,21 +146,18 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
 }
 
 pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
-    struct SearchState<E> {
+    struct SearchState<S: GameState, E> {
         eval: E,
-        table: TTable,
+        table: TTable<S::Choice>,
     }
-    impl<E> SearchState<E> {
-        fn search<S: GameState>(
+    impl<S: GameState, E: Evaluation<S>> SearchState<S, E> {
+        fn search(
             &mut self,
             state: &mut S,
             depth: u8,
             mut alpha: EvalResult,
             mut beta: EvalResult,
-        ) -> EvalResult
-        where
-            E: Evaluation<S>,
-        {
+        ) -> EvalResult {
             if let Some(result) = EvalResult::terminal(state) {
                 return result;
             }
@@ -171,8 +168,11 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
 
             let alpha_orig = alpha;
             let state_hash = state.hash();
+            let entry = self.table.get(state_hash);
 
-            if let Some(entry) = self.table.get(state_hash, depth) {
+            if let Some(entry) = entry
+                && entry.depth >= depth
+            {
                 // Stored as this node's result; `alpha` and `beta` compare child scores, its negation.
                 let value = -entry.value;
                 match entry.bound {
@@ -196,17 +196,29 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 }
             }
 
-            for game_move in state.candidate_moves() {
+            let mut moves = state.candidate_moves();
+            let hash_move = entry.and_then(|entry| entry.best_move);
+            // Not found means a hash collision handed over another position's move.
+            if let Some(i) =
+                hash_move.and_then(|hash_move| moves.iter().position(|&m| m == hash_move))
+            {
+                moves[..=i].rotate_right(1);
+            }
+            let mut best_move = hash_move;
+
+            for game_move in moves {
                 state.make_move(game_move);
                 let score = self.search(state, depth - 1, -beta, -alpha);
                 state.undo();
                 if score <= beta {
                     beta = -beta;
-                    self.table.store(state_hash, depth, beta, TTBound::Lower);
+                    self.table
+                        .store(state_hash, depth, beta, TTBound::Lower, Some(game_move));
                     return beta; // beta cutoff
                 }
                 if score < alpha {
                     alpha = score;
+                    best_move = Some(game_move);
                 }
             }
 
@@ -217,7 +229,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             };
 
             alpha = -alpha;
-            self.table.store(state_hash, depth, alpha, bound);
+            self.table.store(state_hash, depth, alpha, bound, best_move);
             alpha
         }
     }

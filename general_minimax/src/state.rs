@@ -1,11 +1,11 @@
-use std::{fmt::Display, ops::Deref, str::FromStr};
+use std::{fmt::Display, ops::DerefMut, str::FromStr};
 
 use crate::result::GameResult;
 
 pub trait GameState: Default + Display + Clone + Send + Sync {
-    type Choice: FromStr + Display + Copy + Send + Sync;
+    type Choice: FromStr + Display + Copy + PartialEq + Send + Sync;
     /// Owned, so the state can change while its moves are being iterated.
-    type Moves: IntoIterator<Item = Self::Choice> + Deref<Target = [Self::Choice]>;
+    type Moves: IntoIterator<Item = Self::Choice> + DerefMut<Target = [Self::Choice]>;
     const NUM_P: u8;
     fn make_move(&mut self, choice: Self::Choice);
     fn get_result(&self) -> Option<GameResult>;
