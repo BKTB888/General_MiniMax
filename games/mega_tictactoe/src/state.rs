@@ -29,8 +29,6 @@ pub const DIRS: [MapCoord; 4] = [
 /// Empty cells drawn around `bounds` on every side.
 pub const BORDER: MapInt = 2;
 
-type HashType = u64;
-
 #[derive(Clone)]
 pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
     cells: Map,
@@ -38,7 +36,7 @@ pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
     candidate_moves_with_counts: FixedMap<MapCoord, u16>,
     move_history_with_candidates: FixedMap<MapCoord, (u16, Vec<MapCoord>)>,
     result: Option<GameResult>,
-    hash: HashType,
+    hash: u64,
     move_stack: Vec<MapCoord>,
 }
 
@@ -69,7 +67,6 @@ impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P
 
 impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
     type Choice = MapCoord;
-    type Hash = HashType;
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, coord: Self::Choice) {
@@ -110,7 +107,7 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
         self.player
     }
 
-    fn hash(&self) -> Self::Hash {
+    fn hash(&self) -> u64 {
         self.hash
     }
 
@@ -494,7 +491,7 @@ const fn neighbour_offsets<const N: usize>(r: MapInt) -> [MapCoord; N] {
     arr
 }
 
-const fn zobrist_cell_key(coord: MapCoord, player: u8) -> HashType {
+const fn zobrist_cell_key(coord: MapCoord, player: u8) -> u64 {
     // `as u16` keeps negatives to their own 16 bits instead of sign-extending over the others.
     let idx = (coord.0 as u16 as u64) << 32 | (coord.1 as u16 as u64) << 16 | player as u64;
     // Splitmix, not xorshift: a linear mixer lets keys XOR-cancel across cells.

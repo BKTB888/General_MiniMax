@@ -61,7 +61,6 @@ impl Default for MancalaState {
 impl GameState for MancalaState {
     type Choice = u8;
     //TODO:
-    type Hash = u64;
     const NUM_P: u8 = 2;
 
     fn make_move(&mut self, mut choice: Self::Choice) {
@@ -108,7 +107,7 @@ impl GameState for MancalaState {
         self.player as u8
     }
 
-    fn hash(&self) -> Self::Hash {
+    fn hash(&self) -> u64 {
         todo!()
     }
 

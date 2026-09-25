@@ -9,7 +9,6 @@ use general_minimax::{
     state::GameState,
 };
 
-type HashType = u32;
 /// `(col, row)`, signed so it can step off the board.
 type Pos = C<isize, isize>;
 
@@ -20,7 +19,7 @@ pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P:
 
     choices: [u8; AS_USIZE::<M>] = [0; AS_USIZE::<M>],
     result: Option<GameResult>,
-    hash: HashType,
+    hash: u64,
     move_stack: Vec<u8>,
 }
 
@@ -70,7 +69,6 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
     for ConnectKState<N, M, K, NUM_P>
 {
     type Choice = u8;
-    type Hash = HashType;
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, choice: Self::Choice) {
@@ -82,8 +80,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
 
             self.result = self.check_result(col);
 
-            self.hash ^=
-                zobrist_cell_key(col as HashType, row as HashType, self.player as HashType);
+            self.hash ^= zobrist_cell_key(col as u64, row as u64, self.player as u64);
 
             self.player = (self.player + 1) % NUM_P;
             self.move_stack.push(choice);
@@ -113,7 +110,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
         self.player
     }
 
-    fn hash(&self) -> Self::Hash {
+    fn hash(&self) -> u64 {
         self.hash
     }
 
@@ -124,7 +121,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
         self.cells[col][row] = None;
         self.result = None;
         self.player = self.player.checked_sub(1).unwrap_or(NUM_P - 1);
-        self.hash ^= zobrist_cell_key(col as HashType, row as HashType, self.player as HashType);
+        self.hash ^= zobrist_cell_key(col as u64, row as u64, self.player as u64);
     }
 }
 
@@ -171,7 +168,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> ConnectKState<N, M,
     }
 }
 
-const fn zobrist_cell_key(col: HashType, row: HashType, player: HashType) -> HashType {
+const fn zobrist_cell_key(col: u64, row: u64, player: u64) -> u64 {
     // Splitmix, not xorshift: a linear mixer lets keys XOR-cancel across cells.
     (col << 16 | row << 8 | player).splitmix()
 }

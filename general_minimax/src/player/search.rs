@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -11,7 +10,7 @@ use crate::{
         evals::Evaluation,
         players::Player,
         search::EvalResult::{Loss, Win},
-        transposition_table::{TTBound, TTEntry},
+        transposition_table::{TTBound, TTable},
     },
     state::GameState,
 };
@@ -146,18 +145,21 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
 }
 
 pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
-    struct SearchState<S: GameState, E: Evaluation<S>> {
+    struct SearchState<E> {
         eval: E,
-        table: HashMap<<S as GameState>::Hash, TTEntry>,
+        table: TTable,
     }
-    impl<S: GameState, E: Evaluation<S>> SearchState<S, E> {
-        fn search(
+    impl<E> SearchState<E> {
+        fn search<S: GameState>(
             &mut self,
             state: &mut S,
             depth: u8,
             mut alpha: EvalResult,
             mut beta: EvalResult,
-        ) -> EvalResult {
+        ) -> EvalResult
+        where
+            E: Evaluation<S>,
+        {
             if let Some(result) = EvalResult::terminal(state) {
                 return result;
             }
@@ -169,9 +171,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             let alpha_orig = alpha;
             let state_hash = state.hash();
 
-            if let Some(entry) = self.table.get(&state_hash)
-                && entry.depth >= depth
-            {
+            if let Some(entry) = self.table.get(state_hash, depth) {
                 // Stored as this node's result; `alpha` and `beta` compare child scores, its negation.
                 let value = -entry.value;
                 match entry.bound {
@@ -201,14 +201,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 state.undo();
                 if score <= beta {
                     beta = -beta;
-                    self.table.insert(
-                        state_hash,
-                        TTEntry {
-                            depth,
-                            value: beta,
-                            bound: TTBound::Lower,
-                        },
-                    );
+                    self.table.store(state_hash, depth, beta, TTBound::Lower);
                     return beta; // beta cutoff
                 }
                 if score < alpha {
@@ -223,16 +216,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             };
 
             alpha = -alpha;
-
-            self.table.insert(
-                state_hash,
-                TTEntry {
-                    depth,
-                    value: alpha,
-                    bound,
-                },
-            );
-
+            self.table.store(state_hash, depth, alpha, bound);
             alpha
         }
     }
@@ -240,7 +224,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
     // A `Mutex` rather than a `RefCell`, since `to_eval` needs the search to be `Sync`.
     let search = Mutex::new(SearchState {
         eval,
-        table: HashMap::new(),
+        table: TTable::new(),
     });
     move |state, depth, alpha, beta| search.lock().unwrap().search(state, depth, alpha, beta)
 }
