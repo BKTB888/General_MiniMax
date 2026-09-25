@@ -12,7 +12,6 @@ type FiveInRow = KInARowState<5>;
 fn search(c: &mut Criterion) {
     let mut state: FiveInRow = position(0, 8);
     let plain = alphabeta(eval_kinrow);
-    let tt = alphabeta_tt(eval_kinrow);
 
     let mut group = c.benchmark_group("five_in_row");
     for depth in [1, 2] {
@@ -21,7 +20,8 @@ fn search(c: &mut Criterion) {
             b.iter(|| plain.find_best(&mut state, depth))
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
-            b.iter(|| tt.find_best(&mut state, depth))
+            // A fresh table every iteration; a kept one would already hold this search.
+            b.iter(|| alphabeta_tt(eval_kinrow).find_best(&mut state, depth))
         });
         let mut mm = minimax(eval_kinrow).to_player(depth);
         group.bench_function(BenchmarkId::new("minimax", depth), |b| {

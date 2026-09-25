@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -145,11 +146,11 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
 }
 
 pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
-    struct Helper<'a, S: GameState, E: Evaluation<S>> {
-        eval: &'a E,
+    struct SearchState<S: GameState, E: Evaluation<S>> {
+        eval: E,
         table: HashMap<<S as GameState>::Hash, TTEntry>,
     }
-    impl<'a, S: GameState, E: Evaluation<S>> Helper<'a, S, E> {
+    impl<S: GameState, E: Evaluation<S>> SearchState<S, E> {
         fn search(
             &mut self,
             state: &mut S,
@@ -234,16 +235,14 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
 
             alpha
         }
-
-        pub fn new(eval: &'a E) -> Self {
-            Helper {
-                eval,
-                table: HashMap::new(),
-            }
-        }
     }
 
-    move |state, depth, alpha, beta| Helper::new(&eval).search(state, depth, alpha, beta)
+    // A `Mutex` rather than a `RefCell`, since `to_eval` needs the search to be `Sync`.
+    let search = Mutex::new(SearchState {
+        eval,
+        table: HashMap::new(),
+    });
+    move |state, depth, alpha, beta| search.lock().unwrap().search(state, depth, alpha, beta)
 }
 
 pub fn minimax<S: GameState>(eval: impl Evaluation<S>) -> impl Search<S> {

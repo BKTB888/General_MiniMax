@@ -22,7 +22,6 @@ type Connect4 = ConnectKState<7, 6>;
 fn search(c: &mut Criterion) {
     let mut state: Connect4 = position(0, 8);
     let plain = alphabeta(stupid_eval);
-    let tt = alphabeta_tt(stupid_eval);
 
     let mut group = c.benchmark_group("connect4");
     for depth in [4, 6] {
@@ -31,7 +30,8 @@ fn search(c: &mut Criterion) {
             b.iter(|| plain.find_best(&mut state, depth))
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
-            b.iter(|| tt.find_best(&mut state, depth))
+            // A fresh table every iteration; a kept one would already hold this search.
+            b.iter(|| alphabeta_tt(stupid_eval).find_best(&mut state, depth))
         });
         let mut mm = minimax(stupid_eval).to_player(depth);
         group.bench_function(BenchmarkId::new("minimax", depth), |b| {
