@@ -64,6 +64,7 @@ impl GameState for MancalaState {
     type Moves = ArrayVec<u8, 6>;
     //TODO:
     const NUM_P: u8 = 2;
+    const TT_BITS: u8 = 16;
 
     fn make_move(&mut self, mut choice: Self::Choice) {
         self.board_stack.push(self.board);
@@ -111,6 +112,10 @@ impl GameState for MancalaState {
 
     fn hash(&self) -> u64 {
         todo!()
+    }
+
+    fn ply(&self) -> u32 {
+        self.board_stack.len() as u32
     }
 
     fn undo(&mut self) {
