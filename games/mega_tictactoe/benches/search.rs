@@ -17,11 +17,11 @@ fn search(c: &mut Criterion) {
     for depth in [1, 2] {
         // `find_best` undoes its moves, so `state` is the same position every iteration.
         group.bench_function(BenchmarkId::new("alphabeta", depth), |b| {
-            b.iter(|| plain.find_best(&mut state, depth))
+            b.iter(|| plain.find_best(&mut state, depth, None))
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
             // A fresh table every iteration; a kept one would already hold this search.
-            b.iter(|| alphabeta_tt(eval_kinrow).find_best(&mut state, depth))
+            b.iter(|| alphabeta_tt(eval_kinrow).find_best(&mut state, depth, None))
         });
         let mut mm = minimax(eval_kinrow).to_player(depth);
         group.bench_function(BenchmarkId::new("minimax", depth), |b| {

@@ -23,9 +23,9 @@ fn tt_finds_the_same_as_plain() {
     let plain = alphabeta(eval);
     for seed in 0..50 {
         let mut state: Connect4 = position(seed, seed as u32 % 20);
-        let expected = plain.find_best(&mut state, 5);
+        let expected = plain.find_best(&mut state, 5, None);
         // A fresh table per seed, since one kept from an earlier seed can hold deeper results.
         let tt = alphabeta_tt(eval);
-        assert_eq!(tt.find_best(&mut state, 5), expected, "seed {seed}");
+        assert_eq!(tt.find_best(&mut state, 5, None), expected, "seed {seed}");
     }
 }

@@ -28,18 +28,20 @@ fn search(c: &mut Criterion) {
     for depth in [4, 6] {
         // `find_best` undoes its moves, so `state` is the same position every iteration.
         group.bench_function(BenchmarkId::new("alphabeta", depth), |b| {
-            b.iter(|| plain.find_best(&mut state, depth))
+            b.iter(|| plain.find_best(&mut state, depth, None))
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
             // A fresh table every iteration; a kept one would already hold this search.
-            b.iter(|| alphabeta_tt(stupid_eval).find_best(&mut state, depth))
+            b.iter(|| alphabeta_tt(stupid_eval).find_best(&mut state, depth, None))
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt_iterative", depth), |b| {
-            // A fresh table every iteration, kept across the depths like `with_iterative` does.
+            // A fresh table every iteration, kept across the depths with each depth's move
+            // searched first at the next, like `with_iterative` does.
             b.iter(|| {
                 let search = alphabeta_tt(stupid_eval);
+                let mut first = None;
                 for d in 0..=depth {
-                    search.find_best(&mut state, d);
+                    first = Some(search.find_best(&mut state, d, first).0);
                 }
             })
         });

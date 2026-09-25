@@ -57,11 +57,18 @@ pub trait ABSearch<S: GameState>: Fn(&mut S, u8, EvalResult, EvalResult) -> Eval
     where
         Self: Sized,
     {
-        move |state| self.find_best(&mut state.clone(), depth).0
+        move |state| self.find_best(&mut state.clone(), depth, None).0
     }
 
-    fn find_best(&self, state: &mut S, depth: u8) -> (S::Choice, EvalResult) {
-        let moves = state.candidate_moves();
+    /// `first` is searched before the other moves, if it's one of them.
+    fn find_best(
+        &self,
+        state: &mut S,
+        depth: u8,
+        first: Option<S::Choice>,
+    ) -> (S::Choice, EvalResult) {
+        let mut moves = state.candidate_moves();
+        move_to_front(&mut moves, first);
         let mut alpha = Win;
         let mut alpha_move = moves[0];
         let beta = Loss;
@@ -89,11 +96,11 @@ pub trait ABSearch<S: GameState>: Fn(&mut S, u8, EvalResult, EvalResult) -> Eval
         move |state| {
             let start = Instant::now();
             let mut depth = 0;
-            let (mut game_move, mut result) = self.find_best(&mut state.clone(), depth);
+            let (mut game_move, mut result) = self.find_best(&mut state.clone(), depth, None);
 
             while start.elapsed() < duration && !result.is_terminal() {
                 depth += 1;
-                (game_move, result) = self.find_best(&mut state.clone(), depth);
+                (game_move, result) = self.find_best(&mut state.clone(), depth, Some(game_move));
             }
 
             println!("Depth: {depth}, Choice: {game_move}, Result: {result}");
@@ -199,11 +206,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             let mut moves = state.candidate_moves();
             let hash_move = entry.and_then(|entry| entry.best_move);
             // Not found means a hash collision handed over another position's move.
-            if let Some(i) =
-                hash_move.and_then(|hash_move| moves.iter().position(|&m| m == hash_move))
-            {
-                moves[..=i].rotate_right(1);
-            }
+            move_to_front(&mut moves, hash_move);
             let mut best_move = hash_move;
 
             for game_move in moves {
@@ -240,6 +243,13 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
         table: TTable::new(),
     });
     move |state, depth, alpha, beta| search.lock().unwrap().search(state, depth, alpha, beta)
+}
+
+/// Moves `first` to the front of `moves`, keeping the others in order; nothing if absent.
+fn move_to_front<C: PartialEq>(moves: &mut [C], first: Option<C>) {
+    if let Some(i) = first.and_then(|first| moves.iter().position(|m| *m == first)) {
+        moves[..=i].rotate_right(1);
+    }
 }
 
 pub fn minimax<S: GameState>(eval: impl Evaluation<S>) -> impl Search<S> {
