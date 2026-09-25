@@ -12,7 +12,7 @@ use crate::{
     state::GameState,
 };
 
-pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send + Sync {
+pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send {
     fn to_player(self) -> impl Player<S>
     where
         Self: Sized,
@@ -32,7 +32,7 @@ pub trait Evaluation<S: GameState>: Fn(&S) -> EvalResult + Send + Sync {
         }
     }
 }
-impl<S: GameState, F: Fn(&S) -> EvalResult + Send + Sync> Evaluation<S> for F {}
+impl<S: GameState, F: Fn(&S) -> EvalResult + Send> Evaluation<S> for F {}
 
 impl EvalResult {
     /// The finished game's result for the player to move, or `None` while it's still going.

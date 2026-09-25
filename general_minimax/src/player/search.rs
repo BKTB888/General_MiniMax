@@ -1,5 +1,5 @@
 use std::{
-    sync::Mutex,
+    cell::RefCell,
     time::{Duration, Instant},
 };
 
@@ -48,7 +48,7 @@ impl<S: GameState, F: Fn(&mut S, u8) -> EvalResult + Sync> Search<S> for F {}
 pub trait ABSearch<S: GameState>: Fn(&mut S, u8, EvalResult, EvalResult) -> EvalResult {
     fn to_eval(self, depth: u8) -> impl Evaluation<S>
     where
-        Self: Sized + Send + Sync,
+        Self: Sized + Send,
     {
         move |state| self(&mut state.clone(), depth, Loss, Win)
     }
@@ -237,12 +237,12 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
         }
     }
 
-    // A `Mutex` rather than a `RefCell`, since `to_eval` needs the search to be `Sync`.
-    let search = Mutex::new(SearchState {
+    // The search is `Fn`, so storing into the table needs a `RefCell`.
+    let search = RefCell::new(SearchState {
         eval,
         table: TTable::new(),
     });
-    move |state, depth, alpha, beta| search.lock().unwrap().search(state, depth, alpha, beta)
+    move |state, depth, alpha, beta| search.borrow_mut().search(state, depth, alpha, beta)
 }
 
 /// Moves `first` to the front of `moves`, keeping the others in order; nothing if absent.
@@ -252,8 +252,12 @@ fn move_to_front<C: PartialEq>(moves: &mut [C], first: Option<C>) {
     }
 }
 
-pub fn minimax<S: GameState>(eval: impl Evaluation<S>) -> impl Search<S> {
-    fn recursive<S: GameState>(state: &mut S, depth: u8, eval: &impl Evaluation<S>) -> EvalResult {
+pub fn minimax<S: GameState>(eval: impl Evaluation<S> + Sync) -> impl Search<S> {
+    fn recursive<S: GameState>(
+        state: &mut S,
+        depth: u8,
+        eval: &(impl Evaluation<S> + Sync),
+    ) -> EvalResult {
         if let Some(result) = EvalResult::terminal(state) {
             return result;
         }

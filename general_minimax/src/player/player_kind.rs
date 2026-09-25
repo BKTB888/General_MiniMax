@@ -58,7 +58,7 @@ impl PlayerKind {
     /// are the game's own.
     pub fn to_player_creator<S: GameState + 'static>(
         self,
-        eval: impl Evaluation<S> + Copy + 'static,
+        eval: impl Evaluation<S> + Sync + Copy + 'static,
         human: fn(&S) -> S::Choice,
     ) -> Box<dyn PlayerCreator<S>> {
         match self {

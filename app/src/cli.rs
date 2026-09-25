@@ -47,7 +47,7 @@ impl CLI {
     /// `eval` and `human` are the game's own.
     fn play<S: GameState + 'static>(
         &self,
-        eval: impl Evaluation<S> + Copy + 'static,
+        eval: impl Evaluation<S> + Sync + Copy + 'static,
         human: fn(&S) -> S::Choice,
     ) {
         let kinds = [self.p1, self.p2];
