@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rayon::{iter::ParallelIterator, prelude::IntoParallelIterator};
+use rayon::{iter::ParallelIterator, prelude::IntoParallelRefIterator};
 
 use crate::{
     player::{
@@ -26,7 +26,8 @@ pub trait Search<S: GameState>: Fn(&mut S, u8) -> EvalResult + Sync + Sized {
         move |state| {
             state
                 .candidate_moves()
-                .into_par_iter()
+                .par_iter()
+                .copied()
                 .map_init(
                     || state.clone(), // one clone per worker
                     |state, game_move| {
@@ -241,7 +242,8 @@ pub fn minimax<S: GameState>(eval: impl Evaluation<S>) -> impl Search<S> {
 
         -state
             .candidate_moves()
-            .into_par_iter()
+            .par_iter()
+            .copied()
             .map_init(
                 || state.clone(),
                 |state, game_move| {

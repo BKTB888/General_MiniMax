@@ -3,6 +3,7 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use arrayvec::ArrayVec;
 use crossterm::style::Stylize;
 use general_minimax::{result::GameResult, state::GameState};
 
@@ -60,6 +61,7 @@ impl Default for MancalaState {
 
 impl GameState for MancalaState {
     type Choice = u8;
+    type Moves = ArrayVec<u8, 6>;
     //TODO:
     const NUM_P: u8 = 2;
 
@@ -92,7 +94,7 @@ impl GameState for MancalaState {
             .then_some(GameResult::Player(!self.player as u8))
     }
 
-    fn candidate_moves(&self) -> Vec<Self::Choice> {
+    fn candidate_moves(&self) -> Self::Moves {
         Self::get_side_idxs(self.player)
             .into_iter()
             .filter(|&idx| self.board[idx as usize] != 0)

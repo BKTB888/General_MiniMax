@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 general_minimax = { workspace = true }
+arrayvec = { workspace = true }
 colored = { workspace = true }
 
 [dev-dependencies]

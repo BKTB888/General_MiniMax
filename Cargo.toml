@@ -20,6 +20,7 @@ mancala = { path = "games/mancala" }
 mega_tictactoe = { path = "games/mega_tictactoe" }
 infinite_connect4 = { path = "games/infinite_connect4" }
 
+arrayvec = "0.7"
 colored = "3"
 rand = "0.10"
 crossterm = "0.29"

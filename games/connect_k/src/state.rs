@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+use arrayvec::ArrayVec;
 use colored::Colorize;
 use general_minimax::{
     AS_USIZE,
@@ -69,6 +70,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
     for ConnectKState<N, M, K, NUM_P>
 {
     type Choice = u8;
+    type Moves = ArrayVec<u8, { AS_USIZE::<M> }>;
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, choice: Self::Choice) {
@@ -96,7 +98,7 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> GameState
         self.result
     }
 
-    fn candidate_moves(&self) -> Vec<Self::Choice> {
+    fn candidate_moves(&self) -> Self::Moves {
         (0..M)
             .filter(|&choice| self.choices[choice as usize] != N)
             .collect()

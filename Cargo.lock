@@ -88,6 +88,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -224,6 +230,7 @@ dependencies = [
 name = "connect_k"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "colored",
  "criterion",
  "general_minimax",
@@ -537,6 +544,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 name = "mancala"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "criterion",
  "crossterm",
  "general_minimax",
