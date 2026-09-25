@@ -68,7 +68,7 @@ impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P
 impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
     type Choice = MapCoord;
     // Unbounded on an infinite board.
-    type Moves = Vec<MapCoord>;
+    type Moves = Vec<Self::Choice>;
     const NUM_P: u8 = NUM_P;
 
     fn make_move(&mut self, coord: Self::Choice) {
