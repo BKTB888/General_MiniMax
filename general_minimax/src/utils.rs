@@ -3,12 +3,15 @@ use criterion::{BenchmarkGroup, measurement::WallTime};
 
 #[cfg(feature = "bench")]
 use crate::player::evals::Evaluation;
-use crate::{player::players::randys_from_seed, state::GameState};
+use crate::{
+    player::players::{creator_from_seed, randy},
+    state::GameState,
+};
 
 /// The position after `plies` seeded random moves from the start, stopping short of any move
 /// that would end the game. The same `seed` and `plies` always give the same position.
-pub fn position<S: GameState>(seed: u64, plies: u32) -> S {
-    let mut player = randys_from_seed(seed);
+pub fn position<S: GameState + 'static>(seed: u64, plies: u32) -> S {
+    let mut player = creator_from_seed(seed, randy)(0);
     let mut state = S::default();
     for _ in 0..plies {
         let choice = player(&state);

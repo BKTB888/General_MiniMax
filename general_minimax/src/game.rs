@@ -3,81 +3,98 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{AS_USIZE, player::players::Player, result::GameResult, state::GameState};
+use rayon::{iter::ParallelIterator, prelude::IntoParallelIterator};
 
-pub struct Game<S: GameState> {
-    players: [Box<dyn Player<S>>; AS_USIZE::<{ S::NUM_P }>],
-}
+use crate::{
+    AS_USIZE,
+    player::players::{Player, PlayerCreator},
+    result::GameResult,
+    state::GameState,
+};
 
-impl<S: GameState> Game<S> {
-    pub fn new(players: [Box<dyn Player<S>>; AS_USIZE::<{ S::NUM_P }>]) -> Self {
-        Game { players }
-    }
+/// One player per seat, in turn order.
+pub type Players<S> = [Box<dyn Player<S>>; AS_USIZE::<{ <S as GameState>::NUM_P }>];
 
-    pub fn play(&mut self) -> GameResult {
-        let mut state = S::default();
-        loop {
-            for player in self.players.iter_mut() {
-                let choice = player(&state);
-                state.make_move(choice);
+/// One player creator per seat, in turn order.
+pub type PlayerCreators<S> = [Box<dyn PlayerCreator<S>>; AS_USIZE::<{ <S as GameState>::NUM_P }>];
 
-                if let Some(result) = state.get_result() {
-                    return result;
-                }
-            }
-        }
-    }
-
-    pub fn print_play(&mut self) {
-        let mut state = S::default();
+/// Plays one game from `state`, printing every board if `PRINT_BOARD` and the result if
+/// `PRINT_RESULT`.
+pub fn play<S: GameState, const PRINT_BOARD: bool, const PRINT_RESULT: bool>(
+    mut state: S,
+    players: &mut Players<S>,
+) -> GameResult {
+    if PRINT_BOARD {
         println!("Start:\n{state}");
-        let mut i = 1;
-        loop {
-            for player in self.players.iter_mut() {
-                let choice = player(&state);
-                state.make_move(choice);
+    }
+    let mut i = 1;
+    loop {
+        for player in players.iter_mut() {
+            let choice = player(&state);
+            state.make_move(choice);
+            if PRINT_BOARD {
                 println!("{i}:\n{state}");
                 i += 1;
+            }
 
-                if let Some(result) = state.get_result() {
+            if let Some(result) = state.get_result() {
+                if PRINT_RESULT {
+                    // With `PRINT_BOARD` the final board was just printed above.
+                    if !PRINT_BOARD {
+                        println!("{state}");
+                    }
                     result.print();
-                    return;
                 }
+                return result;
             }
         }
     }
+}
 
-    pub fn stats(&mut self, num_games: u32, parallel: bool) -> Stats {
-        if parallel {
-            todo!();
-            /*
-            (0..num_games)
-                .into_par_iter()
-                .map(|_| self.play())
-                .fold(|| BTreeMap::new(), |mut acc, result| {
-                    *acc.entry(result).or_default() += 1;
-                    acc
-                }).reduce(|| BTreeMap::new(), |mut a, b| {
-                    for (result, v) in b {
-                        *a.entry(result).or_default() += v;
-                    }
-                    a
-                })
+/// Plays `num_games` games from `start`, each with fresh players made by `creators` from the game
+/// index, printing every board if `print_board` and each game's result if `print_result`.
+pub fn play_multiple<S: GameState>(
+    start: &S,
+    creators: PlayerCreators<S>,
+    num_games: u32,
+    parallel: bool,
+    print_board: bool,
+    print_result: bool,
+) -> Stats {
+    let play: fn(S, &mut Players<S>) -> GameResult = match (print_board, print_result) {
+        (false, false) => play::<S, false, false>,
+        (false, true) => play::<S, false, true>,
+        (true, false) => play::<S, true, false>,
+        (true, true) => play::<S, true, true>,
+    };
+    // Players are made and used inside one thread, so they never need to be `Send`.
+    let play_game = |game| {
+        let mut players = creators.each_ref().map(|creator| creator(game));
+        play(start.clone(), &mut players)
+    };
 
-             */
-        } else {
-            let now = Instant::now();
-            let results = (0..num_games)
-                .map(|_| self.play())
-                .fold(BTreeMap::new(), |mut acc, result| {
-                    *acc.entry(result).or_default() += 1;
-                    acc
-                });
-            let elapsed = now.elapsed();
+    let now = Instant::now();
+    let results = if parallel {
+        (0..num_games)
+            .into_par_iter()
+            .map(play_game)
+            .fold(BTreeMap::new, count)
+            .reduce(BTreeMap::new, |mut counts, other| {
+                for (result, n) in other {
+                    *counts.entry(result).or_default() += n;
+                }
+                counts
+            })
+    } else {
+        (0..num_games).map(play_game).fold(BTreeMap::new(), count)
+    };
 
-            Stats::new(results, elapsed, num_games)
-        }
-    }
+    Stats::new(results, now.elapsed(), num_games)
+}
+
+fn count(mut counts: BTreeMap<GameResult, u32>, result: GameResult) -> BTreeMap<GameResult, u32> {
+    *counts.entry(result).or_default() += 1;
+    counts
 }
 
 pub struct Stats {

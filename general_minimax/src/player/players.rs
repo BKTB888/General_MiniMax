@@ -1,12 +1,17 @@
 use std::io;
 
 use rand::{
-    SeedableRng,
+    Rng, SeedableRng,
     prelude::{IndexedRandom, StdRng},
-    rng,
 };
 
 use crate::state::GameState;
+
+pub trait PlayerCreator<S: GameState>: Sync + Fn(u32) -> Box<dyn Player<S>> {}
+impl<S: GameState, F: Sync + Fn(u32) -> Box<dyn Player<S>>> PlayerCreator<S> for F {}
+
+pub trait RngPlayer<S: GameState, P: Player<S>>: Sync + Fn(StdRng) -> P {}
+impl<S: GameState, F: Sync + Fn(StdRng) -> P, P: Player<S>> RngPlayer<S, P> for F {}
 
 pub trait Player<S: GameState>: FnMut(&S) -> <S as GameState>::Choice {}
 impl<S: GameState, F: FnMut(&S) -> <S as GameState>::Choice> Player<S> for F {}
@@ -27,11 +32,22 @@ pub fn human<S: GameState>(state: &S) -> S::Choice {
     }
 }
 
-pub fn randy<S: GameState>(state: &S) -> S::Choice {
-    state.candidate_moves().choose(&mut rng()).unwrap().clone()
+/// A player that plays uniformly random candidate moves drawn from `rng`.
+pub fn randy<S: GameState>(mut rng: impl Rng) -> impl Player<S> {
+    move |state: &S| state.candidate_moves().choose(&mut rng).unwrap().clone()
 }
 
-pub fn randys_from_seed<S: GameState>(seed: u64) -> impl Player<S> {
-    let mut rng = StdRng::seed_from_u64(seed);
-    move |state: &S| state.candidate_moves().choose(&mut rng).unwrap().clone()
+/// Makes the player for game `game` by passing `rng_player` an RNG seeded from `seed` and
+/// `game`. Each game plays differently, and the same `seed` and `game` always play the same moves.
+pub fn creator_from_seed<S: GameState, P: Player<S> + 'static>(
+    seed: u64,
+    rng_player: impl RngPlayer<S, P>,
+) -> impl PlayerCreator<S> {
+    move |game| Box::new(rng_player(StdRng::seed_from_u64(game_seed(seed, game))))
+}
+
+/// Distinct for each `(seed, game)` pair while `seed` stays below 2³², so no two games or
+/// seeds share a random sequence.
+fn game_seed(seed: u64, game: u32) -> u64 {
+    seed.rotate_left(32) ^ game as u64
 }

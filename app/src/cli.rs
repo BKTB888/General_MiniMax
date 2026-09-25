@@ -1,14 +1,11 @@
-use std::{fmt::Display, str::FromStr, time::Duration};
-
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum, error::ErrorKind};
 use connect_k::state::ConnectKState;
 use general_minimax::{
-    AS_USIZE,
-    game::Game,
+    game::play_multiple,
     player::{
         evals::{Evaluation, stupid_eval},
-        players::{Player, human, randy, randys_from_seed},
-        search::{ABSearch, alphabeta, alphabeta_tt},
+        player_kind::PlayerKind,
+        players::human,
     },
     state::GameState,
 };
@@ -24,13 +21,20 @@ pub struct CLI {
     /// Same values as `--p1`.
     #[arg(long, default_value = "alphabeta:4")]
     p2: PlayerKind,
-    /// Defaults to `play`.
-    #[command(subcommand)]
-    mode: Option<Mode>,
+    #[arg(long, default_value_t = 1)]
+    games: u32,
+    #[arg(long, conflicts_with_all = ["print_board", "print_result"])]
+    parallel: bool,
+    /// Print the board after every move. Defaults to false.
+    #[arg(long, num_args = 0..=1, require_equals = true, default_missing_value = "true")]
+    print_board: Option<bool>,
+    /// Print the final board and result of every game. Defaults to true if a human plays.
+    #[arg(long, num_args = 0..=1, require_equals = true, default_missing_value = "true")]
+    print_result: Option<bool>,
 }
 
 impl CLI {
-    /// Plays the chosen game with the chosen players and mode.
+    /// Plays the chosen game with the chosen players.
     pub fn run(&self) {
         // Const generics are fixed at compile time, so each game maps to one concrete type.
         match self.game {
@@ -47,34 +51,26 @@ impl CLI {
         human: fn(&S) -> S::Choice,
     ) {
         let kinds = [self.p1, self.p2];
-        let players: [Box<dyn Player<S>>; AS_USIZE::<{ S::NUM_P }>] =
-            std::array::from_fn(|i| make_player(kinds[i], eval, human));
-        let mut game = Game::<S>::new(players);
+        let human_plays = kinds.iter().any(|kind| matches!(kind, PlayerKind::Human));
+        if self.parallel && human_plays {
+            CLI::command()
+                .error(
+                    ErrorKind::ArgumentConflict,
+                    "--parallel can't be used with a human player",
+                )
+                .exit();
+        }
 
-        match self.mode {
-            None | Some(Mode::Play) => game.play().print(),
-            Some(Mode::Stats { games, parallel }) => game.stats(games, parallel).print(),
-        }
-    }
-}
-
-fn make_player<S: GameState + 'static>(
-    kind: PlayerKind,
-    eval: impl Evaluation<S> + 'static,
-    human: fn(&S) -> S::Choice,
-) -> Box<dyn Player<S>> {
-    match kind {
-        PlayerKind::Human => Box::new(human),
-        PlayerKind::Randy(None) => Box::new(randy),
-        PlayerKind::Randy(Some(seed)) => Box::new(randys_from_seed(seed)),
-        PlayerKind::Alphabeta(depth) => Box::new(alphabeta(eval).to_player(depth)),
-        PlayerKind::AlphabetaTT(depth) => Box::new(alphabeta_tt(eval).to_player(depth)),
-        PlayerKind::Iterative(ms) => {
-            Box::new(alphabeta(eval).with_iterative(Duration::from_millis(ms)))
-        }
-        PlayerKind::IterativeTT(ms) => {
-            Box::new(alphabeta_tt(eval).with_iterative(Duration::from_millis(ms)))
-        }
+        play_multiple(
+            &S::default(),
+            // `from_fn` takes its length from `NUM_P`, which generic code can't match to `kinds`'.
+            std::array::from_fn(|i| kinds[i].to_player_creator(eval, human)),
+            self.games,
+            self.parallel,
+            self.print_board.unwrap_or(false),
+            self.print_result.unwrap_or(human_plays),
+        )
+        .print();
     }
 }
 
@@ -83,61 +79,4 @@ pub enum GameKind {
     Mancala,
     Connect4,
     FiveInRow,
-}
-
-#[derive(Clone, Copy)]
-pub enum PlayerKind {
-    Human,
-    /// Random moves, reproducible when seeded.
-    Randy(Option<u64>),
-    Alphabeta(u8),
-    /// Alphabeta with a transposition table.
-    AlphabetaTT(u8),
-    /// Iterative deepening with a time budget in ms per move.
-    Iterative(u64),
-    /// Iterative deepening with a transposition table.
-    IterativeTT(u64),
-}
-
-impl FromStr for PlayerKind {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (name, arg) = match s.split_once(':') {
-            Some((name, arg)) => (name, Some(arg)),
-            None => (s, None),
-        };
-        match name {
-            "human" => Ok(PlayerKind::Human),
-            "randy" => Ok(PlayerKind::Randy(arg.map(|_| number(name, arg)).transpose()?)),
-            "alphabeta" => Ok(PlayerKind::Alphabeta(number(name, arg)?)),
-            "alphabeta-tt" => Ok(PlayerKind::AlphabetaTT(number(name, arg)?)),
-            "iterative" => Ok(PlayerKind::Iterative(number(name, arg)?)),
-            "iterative-tt" => Ok(PlayerKind::IterativeTT(number(name, arg)?)),
-            _ => Err(format!(
-                "unknown player `{name}`, expected human, randy[:<seed>], alphabeta:<depth>, \
-                 alphabeta-tt:<depth>, iterative:<ms> or iterative-tt:<ms>"
-            )),
-        }
-    }
-}
-
-/// Parses the number after `name:`, with errors naming the player.
-fn number<T: FromStr<Err: Display>>(name: &str, arg: Option<&str>) -> Result<T, String> {
-    arg.ok_or(format!("`{name}` needs a number, e.g. `{name}:4`"))?
-        .parse()
-        .map_err(|e| format!("`{name}`: {e}"))
-}
-
-#[derive(Subcommand)]
-pub enum Mode {
-    /// Play one game, printing every move.
-    Play,
-    /// Play many games and print the result percentages.
-    Stats {
-        #[arg(long, default_value_t = 1000)]
-        games: u32,
-        #[arg(long, default_value = "false")]
-        parallel: bool,
-    },
 }
