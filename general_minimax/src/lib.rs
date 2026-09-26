@@ -1,7 +1,7 @@
 #![feature(
-    generic_const_args,
-    min_generic_const_args,
-    macroless_generic_const_args,
+    gca_const_items,
+    gca_min_const_items,
+    gca_macroless_args,
     generic_const_items,
     const_trait_impl,
     trait_alias
