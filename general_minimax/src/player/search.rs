@@ -7,15 +7,14 @@ use rayon::{iter::ParallelIterator, prelude::IntoParallelRefIterator};
 
 use crate::{
     player::{
-        evals::Evaluation,
+        evals::{Evaluation, Score},
         players::Player,
-        search::EvalResult::{Loss, Win},
         transposition_table::{TTBound, TTable},
     },
     state::GameState,
 };
 
-pub trait Search<S: GameState>: Fn(&mut S, u8) -> EvalResult + Sync + Sized {
+pub trait Search<S: GameState>: Fn(&mut S, u8) -> Score + Sync + Sized {
     fn to_eval(self, depth: u8) -> impl Evaluation<S>
     where
         Self: Send,
@@ -37,23 +36,25 @@ pub trait Search<S: GameState>: Fn(&mut S, u8) -> EvalResult + Sync + Sized {
                         (game_move, result)
                     },
                 )
-                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                .min_by(|a, b| a.1.total_cmp(&b.1))
                 .unwrap()
                 .0
         }
     }
 }
-impl<S: GameState, F: Fn(&mut S, u8) -> EvalResult + Sync> Search<S> for F {}
+impl<S: GameState, F: Fn(&mut S, u8) -> Score + Sync> Search<S> for F {}
 
 /// Takes a state, depth, alpha, beta and deadline; `None` means the deadline passed.
 pub trait ABSearch<S: GameState>:
-    Fn(&mut S, u8, EvalResult, EvalResult, Option<Instant>) -> Option<EvalResult>
+    Fn(&mut S, u8, Score, Score, Option<Instant>) -> Option<Score>
 {
     fn to_eval(self, depth: u8) -> impl Evaluation<S>
     where
         Self: Sized + Send,
     {
-        move |state| self(&mut state.clone(), depth, Loss, Win, None).unwrap()
+        move |state| {
+            self(&mut state.clone(), depth, Score::NEG_INFINITY, Score::INFINITY, None).unwrap()
+        }
     }
 
     fn to_player(self, depth: u8) -> impl Player<S>
@@ -69,7 +70,7 @@ pub trait ABSearch<S: GameState>:
         state: &mut S,
         depth: u8,
         first: Option<S::Choice>,
-    ) -> (S::Choice, EvalResult) {
+    ) -> (S::Choice, Score) {
         self.find_best_until(state, depth, first, None).unwrap()
     }
 
@@ -80,12 +81,12 @@ pub trait ABSearch<S: GameState>:
         depth: u8,
         first: Option<S::Choice>,
         deadline: Option<Instant>,
-    ) -> Option<(S::Choice, EvalResult)> {
+    ) -> Option<(S::Choice, Score)> {
         let mut moves = state.candidate_moves();
         move_to_front(&mut moves, first);
-        let mut alpha = Win;
+        let mut alpha = Score::INFINITY;
         let mut alpha_move = moves[0];
-        let beta = Loss;
+        let beta = Score::NEG_INFINITY;
 
         for game_move in moves {
             state.make_move(game_move);
@@ -93,7 +94,7 @@ pub trait ABSearch<S: GameState>:
             state.undo();
             let score = score?;
             if score == beta {
-                return Some((game_move, Win)); // beta cutoff
+                return Some((game_move, Score::INFINITY)); // beta cutoff
             }
             if score < alpha {
                 alpha = score;
@@ -118,7 +119,11 @@ pub trait ABSearch<S: GameState>:
             let mut prev = Duration::ZERO;
             let mut last = start.elapsed();
 
-            while !result.is_terminal() && start.elapsed() + next_depth_time(prev, last) < duration
+            // Only a win or loss is proven; a draw and an even score are both 0 and keep going,
+            // so a drawn endgame deepens until the deadline or `u8::MAX`.
+            while !result.is_infinite()
+                && depth < u8::MAX
+                && start.elapsed() + next_depth_time(prev, last) < duration
             {
                 let depth_start = Instant::now();
                 let Some(found) = self.find_best_until(
@@ -140,29 +145,21 @@ pub trait ABSearch<S: GameState>:
     }
 }
 impl<S: GameState, F> ABSearch<S> for F where
-    F: Fn(&mut S, u8, EvalResult, EvalResult, Option<Instant>) -> Option<EvalResult>
+    F: Fn(&mut S, u8, Score, Score, Option<Instant>) -> Option<Score>
 {
-}
-
-#[derive(PartialEq, Copy, Clone, Debug)]
-pub enum EvalResult {
-    Win,
-    Loss,
-    Draw,
-    Score(f32),
 }
 
 pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
     fn recursive<S: GameState>(
         state: &mut S,
         depth: u8,
-        mut alpha: EvalResult,
-        beta: EvalResult,
+        mut alpha: Score,
+        beta: Score,
         deadline: Option<Instant>,
         eval: &impl Evaluation<S>,
-    ) -> Option<EvalResult> {
-        if let Some(result) = EvalResult::terminal(state) {
-            return Some(result);
+    ) -> Option<Score> {
+        if let Some(result) = state.get_result() {
+            return Some(result.score_for(state.current_player()));
         }
 
         if depth == 0 {
@@ -205,12 +202,12 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             &mut self,
             state: &mut S,
             depth: u8,
-            mut alpha: EvalResult,
-            mut beta: EvalResult,
+            mut alpha: Score,
+            mut beta: Score,
             deadline: Option<Instant>,
-        ) -> Option<EvalResult> {
-            if let Some(result) = EvalResult::terminal(state) {
-                return Some(result);
+        ) -> Option<Score> {
+            if let Some(result) = state.get_result() {
+                return Some(result.score_for(state.current_player()));
             }
 
             if depth == 0 {
@@ -320,9 +317,9 @@ pub fn minimax<S: GameState>(eval: impl Evaluation<S> + Sync) -> impl Search<S> 
         state: &mut S,
         depth: u8,
         eval: &(impl Evaluation<S> + Sync),
-    ) -> EvalResult {
-        if let Some(result) = EvalResult::terminal(state) {
-            return result;
+    ) -> Score {
+        if let Some(result) = state.get_result() {
+            return result.score_for(state.current_player());
         }
 
         if depth == 0 {
@@ -342,7 +339,7 @@ pub fn minimax<S: GameState>(eval: impl Evaluation<S> + Sync) -> impl Search<S> 
                     result
                 },
             )
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .unwrap()
     }
 

@@ -3,7 +3,7 @@ use std::{
     hash::{BuildHasherDefault, Hasher},
 };
 
-use crate::player::search::EvalResult;
+use crate::player::evals::Score;
 
 /// Search results keyed by position hash, with `C` the game's choice type.
 pub struct TTable<C> {
@@ -27,7 +27,7 @@ impl<C: Copy> TTable<C> {
         &mut self,
         hash: u64,
         depth: u8,
-        value: EvalResult,
+        value: Score,
         bound: TTBound,
         best_move: Option<C>,
     ) {
@@ -70,7 +70,7 @@ pub enum TTBound {
 #[derive(Copy, Clone, Debug)]
 pub struct TTEntry<C> {
     pub(crate) depth: u8,
-    pub(crate) value: EvalResult,
+    pub(crate) value: Score,
     pub(crate) bound: TTBound,
     /// The move to search first.
     pub(crate) best_move: Option<C>,

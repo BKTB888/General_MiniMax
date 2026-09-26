@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use general_minimax::{
-    player::search::{EvalResult, EvalResult::Score},
+    player::evals::Score,
     state::GameState,
 };
 
@@ -57,7 +57,7 @@ fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, pl
     total
 }
 
-pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> EvalResult {
+pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> Score {
     let current = state.current_player();
 
     let my_score: f32 = player_score(state, current);
@@ -66,5 +66,5 @@ pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>)
         .map(|p| player_score(state, p))
         .sum();
 
-    Score(my_score - opp_score)
+    (my_score - opp_score) as Score
 }

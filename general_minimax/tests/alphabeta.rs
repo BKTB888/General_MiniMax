@@ -10,8 +10,8 @@ use std::time::Instant;
 use connect_k::state::ConnectKState;
 use general_minimax::{
     player::{
-        evals::stupid_eval,
-        search::{ABSearch, EvalResult::Score, alphabeta, alphabeta_tt},
+        evals::{Score, stupid_eval},
+        search::{ABSearch, alphabeta, alphabeta_tt},
     },
     state::GameState,
     utils::position,
@@ -24,7 +24,7 @@ type Connect4 = ConnectKState<7, 6>;
 #[test]
 fn tt_finds_the_same_as_plain() {
     // Varied leaf values, so the table holds real bounds rather than all zeros.
-    let eval = |s: &Connect4| Score((s.hash() % 1000) as f32);
+    let eval = |s: &Connect4| (s.hash() % 1000) as Score;
     let plain = alphabeta(eval);
     for seed in 0..50 {
         let mut state: Connect4 = position(seed, seed as u32 % 20);

@@ -2,6 +2,8 @@ use std::fmt::{Display, Formatter};
 
 use colored::{Color, ColoredString, Colorize};
 
+use crate::player::evals::Score;
+
 #[derive(Ord, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub enum GameResult {
     Player(u8),
@@ -15,6 +17,16 @@ impl Display for GameResult {
 }
 
 impl GameResult {
+    /// The result as a score for `player`: infinity for a win, minus infinity for a loss, 0 for a
+    /// draw.
+    pub fn score_for(self, player: u8) -> Score {
+        match self {
+            GameResult::Player(winner) if winner == player => Score::INFINITY,
+            GameResult::Player(_) => Score::NEG_INFINITY,
+            GameResult::Draw => 0.0,
+        }
+    }
+
     fn get_colored(&self) -> ColoredString {
         if let GameResult::Player(player) = self {
             format!("Player {}", player + 1).color(get_player_color(*player))
