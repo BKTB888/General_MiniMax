@@ -5,9 +5,14 @@
 )]
 #![allow(incomplete_features)]
 
+use std::time::Instant;
+
 use connect_k::state::ConnectKState;
 use general_minimax::{
-    player::search::{ABSearch, EvalResult::Score, alphabeta, alphabeta_tt},
+    player::{
+        evals::stupid_eval,
+        search::{ABSearch, EvalResult::Score, alphabeta, alphabeta_tt},
+    },
     state::GameState,
     utils::position,
 };
@@ -28,4 +33,13 @@ fn tt_finds_the_same_as_plain() {
         let tt = alphabeta_tt(eval);
         assert_eq!(tt.find_best(&mut state, 5, None), expected, "seed {seed}");
     }
+}
+
+#[test]
+fn passed_deadline_aborts_and_leaves_the_state() {
+    let mut state: Connect4 = position(1, 8);
+    let hash = state.hash();
+    let tt = alphabeta_tt(stupid_eval);
+    assert_eq!(tt.find_best_until(&mut state, 5, None, Some(Instant::now())), None);
+    assert_eq!(state.hash(), hash);
 }
