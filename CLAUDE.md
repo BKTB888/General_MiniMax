@@ -18,6 +18,22 @@ Open questions:
   up got slower (cache misses, per-game allocation).
 - Mancala has no hash yet (`MancalaState::hash` is `todo!()`), so it can't use the table.
 
+## Aging, compared with Stockfish
+
+Stockfish bumps a generation counter at the start of every search and stores it in each
+entry (5 bits, wrapping after 32). Age is how many searches ago an entry was stored. A new
+position evicts the entry in its 3-entry cluster with the lowest `depth - 8 * age`, so a
+depth-12 entry from the last search (worth 4) outlasts a fresh depth-2 one. An entry for the
+same position is only overwritten by an exact bound, a result at most about 3 plies
+shallower, or when the old entry is from an earlier search.
+
+Here the generation is `GameState::ply`, which grows every move rather than every search, and
+worth is `depth - age` in plies. Stockfish's weight (about 4 per ply for us) made
+`alphabeta-tt:12` take 47 ms instead of 25: in Connect 4 the last search's deep entries are
+what the next search reuses most. Letting any newer entry beat any older one was worse still
+(54 ms). Details come from reading Stockfish's `tt.cpp`; they change between versions, and
+whether a probe hit refreshes an entry's generation was left unclear.
+
 ## Ideas
 
 - Fail-soft `alphabeta_tt`: return and store the best score seen instead of the window edge,
@@ -26,6 +42,8 @@ Open questions:
   writes by storing the key XORed with the entry.
 - Keep one table across games, letting aging push out old entries, so no game pays for
   building a table.
+- Stockfish's same-position rule: keep a deeper old result instead of always overwriting the
+  position's own slot.
 - Prefetch the child's bucket right after `make_move`.
 - Smaller entries (a partial key check) so more fit per cache line.
 - A long-search benchmark (seconds per move, five-in-a-row), where the HashMap's growth
