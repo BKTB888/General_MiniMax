@@ -53,7 +53,14 @@ pub trait ABSearch<S: GameState>:
         Self: Sized + Send,
     {
         move |state| {
-            self(&mut state.clone(), depth, Score::NEG_INFINITY, Score::INFINITY, None).unwrap()
+            self(
+                &mut state.clone(),
+                depth,
+                Score::NEG_INFINITY,
+                Score::INFINITY,
+                None,
+            )
+            .unwrap()
         }
     }
 
@@ -65,12 +72,7 @@ pub trait ABSearch<S: GameState>:
     }
 
     /// `first` is searched before the other moves, if it's one of them.
-    fn find_best(
-        &self,
-        state: &mut S,
-        depth: u8,
-        first: Option<S::Choice>,
-    ) -> (S::Choice, Score) {
+    fn find_best(&self, state: &mut S, depth: u8, first: Option<S::Choice>) -> (S::Choice, Score) {
         self.find_best_until(state, depth, first, None).unwrap()
     }
 
@@ -94,7 +96,7 @@ pub trait ABSearch<S: GameState>:
             state.undo();
             let score = -score?;
             if score >= beta {
-                return Some((game_move, beta)); // beta cutoff
+                return Some((game_move, score)); // beta cutoff
             }
             if score > alpha {
                 alpha = score;
@@ -171,25 +173,23 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
             return None;
         }
 
+        let mut best = Score::NEG_INFINITY;
         for game_move in state.candidate_moves() {
             state.make_move(game_move);
             let score = recursive(state, depth - 1, -beta, -alpha, deadline, eval);
             state.undo();
             let score = -score?;
+            best = best.max(score);
+            alpha = alpha.max(score);
             if score >= beta {
-                return Some(beta); // beta cutoff
-            }
-            if score > alpha {
-                alpha = score;
+                break; // beta cutoff
             }
         }
 
-        Some(alpha)
+        Some(best)
     }
 
-    move |state, depth, alpha, beta, deadline| {
-        recursive(state, depth, alpha, beta, deadline, &eval)
-    }
+    move |state, depth, alpha, beta, deadline| recursive(state, depth, alpha, beta, deadline, &eval)
 }
 
 pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
@@ -203,7 +203,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             state: &mut S,
             depth: u8,
             mut alpha: Score,
-            mut beta: Score,
+            beta: Score,
             deadline: Option<Instant>,
         ) -> Option<Score> {
             if let Some(result) = state.get_result() {
@@ -219,31 +219,20 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 return None;
             }
 
-            let alpha_orig = alpha;
             let state_hash = state.hash();
             let entry = self.table.get(state_hash);
 
             if let Some(entry) = entry
                 && entry.depth >= depth
             {
-                match entry.bound {
-                    TTBound::Exact => return Some(entry.value),
-                    TTBound::Lower => {
-                        if entry.value >= beta {
-                            return Some(beta);
-                        }
-                        if entry.value > alpha {
-                            alpha = entry.value;
-                        }
-                    }
-                    TTBound::Upper => {
-                        if entry.value <= alpha {
-                            return Some(alpha);
-                        }
-                        if entry.value < beta {
-                            beta = entry.value;
-                        }
-                    }
+                // A bound only cuts off; narrowing alpha with one could store a fail-low as exact.
+                let cutoff = match entry.bound {
+                    TTBound::Exact => true,
+                    TTBound::Lower => entry.value >= beta,
+                    TTBound::Upper => entry.value <= alpha,
+                };
+                if cutoff {
+                    return Some(entry.value);
                 }
             }
 
@@ -252,6 +241,8 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             // Not found means a hash collision handed over another position's move.
             move_to_front(&mut moves, hash_move);
             let mut best_move = hash_move;
+            let mut best = Score::NEG_INFINITY;
+            let mut bound = TTBound::Upper;
 
             for game_move in moves {
                 state.make_move(game_move);
@@ -259,25 +250,20 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 state.undo();
                 // Returns before any `store`, so an aborted search leaves the table alone.
                 let score = -score?;
-                if score >= beta {
-                    self.table
-                        .store(state_hash, depth, beta, TTBound::Lower, Some(game_move));
-                    return Some(beta); // beta cutoff
-                }
+                best = best.max(score);
                 if score > alpha {
                     alpha = score;
                     best_move = Some(game_move);
+                    bound = TTBound::Exact;
+                }
+                if score >= beta {
+                    bound = TTBound::Lower;
+                    break; // beta cutoff
                 }
             }
 
-            let bound = if alpha == alpha_orig {
-                TTBound::Upper
-            } else {
-                TTBound::Exact
-            };
-
-            self.table.store(state_hash, depth, alpha, bound, best_move);
-            Some(alpha)
+            self.table.store(state_hash, depth, best, bound, best_move);
+            Some(best)
         }
     }
 
@@ -287,7 +273,9 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
         table: TTable::new(),
     });
     move |state, depth, alpha, beta, deadline| {
-        search.borrow_mut().search(state, depth, alpha, beta, deadline)
+        search
+            .borrow_mut()
+            .search(state, depth, alpha, beta, deadline)
     }
 }
 
