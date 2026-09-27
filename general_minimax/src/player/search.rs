@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    ops::DerefMut,
     time::{Duration, Instant},
 };
 
@@ -84,8 +85,7 @@ pub trait ABSearch<S: GameState>:
         first: Option<S::Choice>,
         deadline: Option<Instant>,
     ) -> Option<(S::Choice, Score)> {
-        let mut moves = state.candidate_moves();
-        move_to_front(&mut moves, first);
+        let moves = state.candidate_moves().to_front(first);
         let mut best_move = moves[0];
 
         let mut alpha = Score::NEG_INFINITY;
@@ -237,14 +237,12 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 }
             }
 
-            let mut moves = state.candidate_moves();
             let mut best_move = entry.and_then(|entry| entry.best_move);
-            // Not found means a hash collision handed over another position's move.
-            move_to_front(&mut moves, best_move);
             let mut best = Score::NEG_INFINITY;
             let mut bound = TTBound::Upper;
 
-            for game_move in moves {
+            // Not found means a hash collision handed over another position's move.
+            for game_move in state.candidate_moves().to_front(best_move) {
                 state.make_move(game_move);
                 let score = self.search(state, depth - 1, -beta, -alpha, deadline);
                 state.undo();
@@ -279,12 +277,16 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
     }
 }
 
-/// Moves `first` to the front of `moves`, keeping the others in order; nothing if absent.
-fn move_to_front<C: PartialEq>(moves: &mut [C], first: Option<C>) {
-    if let Some(i) = first.and_then(|first| moves.iter().position(|m| *m == first)) {
-        moves[..=i].rotate_right(1);
+trait ToFront<C: PartialEq>: DerefMut<Target = [C]> + Sized {
+    /// `self` with `first` at the front and the others in order; unchanged if absent.
+    fn to_front(mut self, first: Option<C>) -> Self {
+        if let Some(i) = first.and_then(|first| self.iter().position(|m| *m == first)) {
+            self[..=i].rotate_right(1);
+        }
+        self
     }
 }
+impl<C: PartialEq, M: DerefMut<Target = [C]>> ToFront<C> for M {}
 
 /// The expected time of the next depth, given the last two depths took `prev` and `last`.
 fn next_depth_time(prev: Duration, last: Duration) -> Duration {
