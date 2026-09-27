@@ -84,25 +84,25 @@ pub trait ABSearch<S: GameState>:
     ) -> Option<(S::Choice, Score)> {
         let mut moves = state.candidate_moves();
         move_to_front(&mut moves, first);
-        let mut alpha = Score::INFINITY;
-        let mut alpha_move = moves[0];
-        let beta = Score::NEG_INFINITY;
+        let mut alpha = Score::NEG_INFINITY;
+        let mut best_move = moves[0];
+        let beta = Score::INFINITY;
 
         for game_move in moves {
             state.make_move(game_move);
             let score = self(state, depth, -beta, -alpha, deadline);
             state.undo();
-            let score = score?;
-            if score == beta {
-                return Some((game_move, Score::INFINITY)); // beta cutoff
+            let score = -score?;
+            if score >= beta {
+                return Some((game_move, beta)); // beta cutoff
             }
-            if score < alpha {
+            if score > alpha {
                 alpha = score;
-                alpha_move = game_move;
+                best_move = game_move;
             }
         }
 
-        Some((alpha_move, -alpha))
+        Some((best_move, alpha))
     }
 
     fn with_iterative(self, duration: Duration) -> impl Player<S>
@@ -175,16 +175,16 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
             state.make_move(game_move);
             let score = recursive(state, depth - 1, -beta, -alpha, deadline, eval);
             state.undo();
-            let score = score?;
-            if score <= beta {
-                return Some(-beta); // beta cutoff
+            let score = -score?;
+            if score >= beta {
+                return Some(beta); // beta cutoff
             }
-            if score < alpha {
+            if score > alpha {
                 alpha = score;
             }
         }
 
-        Some(-alpha)
+        Some(alpha)
     }
 
     move |state, depth, alpha, beta, deadline| {
@@ -226,24 +226,22 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             if let Some(entry) = entry
                 && entry.depth >= depth
             {
-                // Stored as this node's result; `alpha` and `beta` compare child scores, its negation.
-                let value = -entry.value;
                 match entry.bound {
                     TTBound::Exact => return Some(entry.value),
                     TTBound::Lower => {
-                        if value <= beta {
-                            return Some(-beta);
+                        if entry.value >= beta {
+                            return Some(beta);
                         }
-                        if value < alpha {
-                            alpha = value;
+                        if entry.value > alpha {
+                            alpha = entry.value;
                         }
                     }
                     TTBound::Upper => {
-                        if value >= alpha {
-                            return Some(-alpha);
+                        if entry.value <= alpha {
+                            return Some(alpha);
                         }
-                        if value > beta {
-                            beta = value;
+                        if entry.value < beta {
+                            beta = entry.value;
                         }
                     }
                 }
@@ -260,14 +258,13 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 let score = self.search(state, depth - 1, -beta, -alpha, deadline);
                 state.undo();
                 // Returns before any `store`, so an aborted search leaves the table alone.
-                let score = score?;
-                if score <= beta {
-                    beta = -beta;
+                let score = -score?;
+                if score >= beta {
                     self.table
                         .store(state_hash, depth, beta, TTBound::Lower, Some(game_move));
                     return Some(beta); // beta cutoff
                 }
-                if score < alpha {
+                if score > alpha {
                     alpha = score;
                     best_move = Some(game_move);
                 }
@@ -279,7 +276,6 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
                 TTBound::Exact
             };
 
-            alpha = -alpha;
             self.table.store(state_hash, depth, alpha, bound, best_move);
             Some(alpha)
         }
