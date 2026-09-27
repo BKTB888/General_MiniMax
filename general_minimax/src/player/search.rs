@@ -86,8 +86,9 @@ pub trait ABSearch<S: GameState>:
     ) -> Option<(S::Choice, Score)> {
         let mut moves = state.candidate_moves();
         move_to_front(&mut moves, first);
-        let mut alpha = Score::NEG_INFINITY;
         let mut best_move = moves[0];
+
+        let mut alpha = Score::NEG_INFINITY;
         let beta = Score::INFINITY;
 
         for game_move in moves {
@@ -237,10 +238,9 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
             }
 
             let mut moves = state.candidate_moves();
-            let hash_move = entry.and_then(|entry| entry.best_move);
+            let mut best_move = entry.and_then(|entry| entry.best_move);
             // Not found means a hash collision handed over another position's move.
-            move_to_front(&mut moves, hash_move);
-            let mut best_move = hash_move;
+            move_to_front(&mut moves, best_move);
             let mut best = Score::NEG_INFINITY;
             let mut bound = TTBound::Upper;
 
