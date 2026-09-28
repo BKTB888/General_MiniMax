@@ -56,16 +56,25 @@ impl Map {
         }
         let before = self.candidates.len();
 
-        let mut five = self.cells[at].lines.place_center(player);
+        self.cells[at].lines.place_center(player);
+        // Per direction, the stones from four cells behind to four ahead, a 16-bit lane each.
+        let mut runs = 0u64;
         for (d, stride) in self.strides().into_iter().enumerate() {
+            let (mut behind, mut ahead) = (0, 0);
             for (i, k) in ALONG {
                 let target = at.wrapping_add_signed(k * stride);
-                five |= self.reached(target).lines.place(d, i, player);
-                if k.abs() == 1 {
-                    self.near_placed(target, coord + DIRS[d] * k as MapInt);
+                let line = self.reached(target).lines.place(d, i, player);
+                match k {
+                    // The lines centered two cells away reach four past the stone.
+                    -2 => behind = line.stones_of(player),
+                    2 => ahead = line.stones_of(player),
+                    _ => self.near_placed(target, coord + DIRS[d] * k as MapInt),
                 }
             }
+            let nine = behind | ahead << (WIDTH - 1);
+            runs |= (nine as u64) << (16 * d);
         }
+        let five = five_in_a_lane(runs);
 
         let added = (self.candidates.len() - before) as u8;
         self.history.push(Placed {
@@ -273,6 +282,13 @@ impl PartialEq for Map {
 /// centered `k = CENTER - i` steps along the line's direction.
 const ALONG: [(u8, isize); 4] = [(0, 2), (1, 1), (3, -1), (4, -2)];
 
+/// Whether any 16-bit lane of `runs` has five bits set in a row. Only the low nine bits of each
+/// lane may be set.
+fn five_in_a_lane(runs: u64) -> bool {
+    // A lane's top bits are clear, so bits shifted in from the next lane die in the first `&`.
+    runs & runs >> 1 & runs >> 2 & runs >> 3 & runs >> 4 != 0
+}
+
 /// `Cell::pos` and `Placed::was_at` for a cell that is not a candidate.
 const NONE: u16 = u16::MAX;
 
@@ -302,20 +318,17 @@ struct Placed {
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 struct FourLines([Line; 4]);
 impl FourLines {
-    /// Sets cell `i` of the line in direction `d`. Returns whether that line is now five of `player`.
-    fn place(&mut self, d: usize, i: u8, player: u8) -> bool {
+    /// Sets cell `i` of the line in direction `d`. Returns the line as it is now.
+    fn place(&mut self, d: usize, i: u8, player: u8) -> Line {
         let line = &mut self.0[d];
         line.set(i, player);
-        line.is_five(player)
+        *line
     }
-    /// Puts `player` on this cell's own coordinate. Returns whether any line is now five.
-    fn place_center(&mut self, player: u8) -> bool {
-        let mut five = false;
+    /// Puts `player` on this cell's own coordinate.
+    fn place_center(&mut self, player: u8) {
         for line in &mut self.0 {
             line.set(CENTER, player);
-            five |= line.is_five(player);
         }
-        five
     }
     /// The player on this cell's own coordinate, if any.
     fn owner(&self) -> Option<u8> {
@@ -354,9 +367,10 @@ impl Line {
         debug_assert!(i < WIDTH);
         (0..2).find(|&player| self.0.get(i + WIDTH * player))
     }
-    fn is_five(&self, player: u8) -> bool {
-        const FULL: u16 = (1 << WIDTH) - 1;
-        self.0.0 >> (WIDTH * player) & FULL == FULL
+    /// The cells holding `player`'s stones, as the low `WIDTH` bits.
+    fn stones_of(self, player: u8) -> u16 {
+        const ALL: u16 = (1 << WIDTH) - 1;
+        self.0.0 >> (WIDTH * player) & ALL
     }
 }
 
@@ -407,6 +421,38 @@ mod tests {
         }
         assert!(map.width > width, "a stone near the edge grows the grid");
         assert!(map.place(Coordinate(0, 16), 0));
+    }
+
+    #[test]
+    fn five_in_every_direction_whichever_stone_completes_it() {
+        for dir in DIRS {
+            for last in 0..5 {
+                let mut map = Map::default();
+                let start = Coordinate(3, -2);
+                for k in (0..5).filter(|&k| k != last) {
+                    assert!(!map.place(start + dir * k, 0));
+                }
+                // The other player's stones on both ends change nothing.
+                map.place(start + -dir, 1);
+                map.place(start + dir * 5, 1);
+                assert!(
+                    map.place(start + dir * last, 0),
+                    "{dir} completed at {last}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_gap_or_the_other_players_stone_breaks_a_five() {
+        for dir in DIRS {
+            let mut map = Map::default();
+            for k in [0, 1, 2, 4, 5] {
+                assert!(!map.place(dir * k, 0));
+            }
+            map.place(dir * 3, 1);
+            assert!(!map.place(dir * 6, 0), "{dir}");
+        }
     }
 
     #[test]
