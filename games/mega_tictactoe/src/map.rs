@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, hash_map::Entry},
     hash::{BuildHasherDefault, Hasher},
     ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr},
 };
@@ -79,11 +79,13 @@ impl Map {
     }
     /// Runs `clear` on the entry at `at`, dropping the entry if that leaves it empty.
     fn clear_in(&mut self, at: MapCoord, clear: impl FnOnce(&mut FourLines)) {
-        let lines = self.cells.get_mut(&at).unwrap();
-        clear(lines);
+        let Entry::Occupied(mut lines) = self.cells.entry(at) else {
+            unreachable!("a stone's lines always have an entry");
+        };
+        clear(lines.get_mut());
         // Keeps the map sparse, and equal to how it was before the stone.
-        if lines.is_empty() {
-            self.cells.remove(&at);
+        if lines.get().is_empty() {
+            lines.remove();
         }
     }
 }
