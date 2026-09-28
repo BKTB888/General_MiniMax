@@ -1,7 +1,4 @@
-use std::{
-    collections::hash_map::Entry,
-    fmt::{Display, Formatter, Result as FmtResult},
-};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use colored::Colorize;
 use general_minimax::{
@@ -11,34 +8,17 @@ use general_minimax::{
     state::GameState,
 };
 
-use crate::map::{FixedMap, Map, MapCoord, MapInt};
+use crate::map::{Map, MapCoord, MapInt};
 
 /// Empty cells drawn around `bounds` on every side.
 pub const BORDER: MapInt = 2;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct KInARowState {
     cells: Map,
     player: u8,
-    candidate_moves_with_counts: FixedMap<MapCoord, u16>,
-    move_history_with_candidates: FixedMap<MapCoord, (u16, Vec<MapCoord>)>,
     result: Option<GameResult>,
     hash: u64,
-    move_stack: Vec<MapCoord>,
-}
-
-impl Default for KInARowState {
-    fn default() -> Self {
-        Self {
-            cells: Map::default(),
-            player: 0,
-            candidate_moves_with_counts: [((0, 0).into(), 1)].into_iter().collect(),
-            move_history_with_candidates: FixedMap::default(),
-            result: None,
-            hash: 0,
-            move_stack: Vec::new(),
-        }
-    }
 }
 
 impl From<Vec<MapCoord>> for KInARowState {
@@ -65,10 +45,6 @@ impl GameState for KInARowState {
             self.result = five.then_some(GameResult::Player(self.player));
 
             self.player = (self.player + 1) % Self::NUM_P;
-            let prior_count = self.candidate_moves_with_counts.remove(&coord).unwrap_or(0);
-
-            self.add_candidates(coord, prior_count);
-            self.move_stack.push(coord);
         } else {
             panic!(
                 "Game is over, but player {} tried to make a move {coord}.",
@@ -83,7 +59,7 @@ impl GameState for KInARowState {
     }
 
     fn candidate_moves(&self) -> Self::Moves {
-        self.candidate_moves_with_counts.keys().copied().collect()
+        self.cells.candidates().to_vec()
     }
 
     fn is_valid(&self, choice: Self::Choice) -> bool {
@@ -99,22 +75,9 @@ impl GameState for KInARowState {
     }
 
     fn undo(&mut self) {
-        let choice = self.move_stack.pop().unwrap();
-        self.cells.remove(choice);
+        let choice = self.cells.undo();
         self.player = self.player.checked_sub(1).unwrap_or(Self::NUM_P - 1);
         self.result = None;
-        let (count, candidates) = self.move_history_with_candidates.remove(&choice).unwrap();
-        for coord in candidates {
-            if let Entry::Occupied(mut e) = self.candidate_moves_with_counts.entry(coord) {
-                let count = e.get_mut();
-                *count -= 1;
-                if *count == 0 {
-                    e.remove();
-                }
-            }
-        }
-        self.candidate_moves_with_counts.insert(choice, count);
-
         self.hash ^= zobrist_cell_key(choice, self.player);
     }
 }
@@ -136,24 +99,6 @@ impl KInARowState {
                 Coordinate(max.0.max(r), max.1.max(c)),
             )
         })
-    }
-    fn add_candidates(&mut self, from: MapCoord, prior_count: u16) {
-        const R: MapInt = 1;
-        const NEIGHBOURS: [MapCoord; ((2 * R + 1).pow(2) - 1) as usize] = neighbour_offsets(R);
-
-        let candidates = NEIGHBOURS
-            .iter()
-            .map(|&coord| coord + from)
-            .filter(|&coord| self.is_valid(coord))
-            .collect::<Vec<_>>();
-
-        candidates.iter().for_each(|coord| {
-            *self.candidate_moves_with_counts.entry(*coord).or_default() += 1;
-        });
-
-        let (count, vec) = self.move_history_with_candidates.entry(from).or_default();
-        *count = prior_count;
-        vec.extend(candidates);
     }
 }
 impl Display for KInARowState {
@@ -254,14 +199,6 @@ mod tests {
     fn assert_states_eq(a: &KInARowState, b: &KInARowState) {
         assert_eq!(a.cells, b.cells, "cells differ");
         assert_eq!(a.player, b.player, "player differs");
-        assert_eq!(
-            a.candidate_moves_with_counts, b.candidate_moves_with_counts,
-            "candidate_moves_with_counts differs"
-        );
-        assert_eq!(
-            a.move_history_with_candidates, b.move_history_with_candidates,
-            "move_history_with_candidates differs"
-        );
         assert_eq!(a.result, b.result, "result differs");
         assert_eq!(a.hash, b.hash, "hash differs");
     }
@@ -431,21 +368,6 @@ mod tests {
         s.undo();
         assert_states_eq(&s, &original);
     }
-}
-
-/// Every offset at most `r` away on both axes, except `(0, 0)`. `N` must be `(2r + 1)² - 1`.
-const fn neighbour_offsets<const N: usize>(r: MapInt) -> [MapCoord; N] {
-    let mut arr = [Coordinate(0, 0); N];
-    let mut i = 0;
-    for a in -r..r + 1 {
-        for b in -r..r + 1 {
-            if a != 0 || b != 0 {
-                arr[i] = Coordinate(a, b);
-                i += 1;
-            }
-        }
-    }
-    arr
 }
 
 const fn zobrist_cell_key(coord: MapCoord, player: u8) -> u64 {

@@ -3,8 +3,7 @@
     gca_min_const_items,
     gca_macroless_args,
     generic_const_items,
-    const_trait_impl,
-    const_iter
+    const_trait_impl
 )]
 #![allow(incomplete_features)]
 
