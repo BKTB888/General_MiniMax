@@ -1,13 +1,32 @@
 use std::{
     collections::HashMap,
-    hash::{BuildHasherDefault, DefaultHasher},
+    hash::{BuildHasherDefault, Hasher},
     ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr},
 };
 
-use general_minimax::coordinate::Coordinate;
+use general_minimax::{coordinate::Coordinate, mixers::Splitmix};
 
 /// `HashMap` with a fixed seed, so iteration order is the same on every run.
-pub(crate) type FixedMap<K, V> = HashMap<K, V, BuildHasherDefault<DefaultHasher>>;
+pub(crate) type FixedMap<K, V> = HashMap<K, V, BuildHasherDefault<CoordHasher>>;
+
+/// Hashes a `MapCoord` by packing its two `i16`s into one word and mixing it once.
+#[derive(Default)]
+pub(crate) struct CoordHasher(u64);
+
+impl Hasher for CoordHasher {
+    fn finish(&self) -> u64 {
+        // The map picks buckets from the top bits, which a bare packed coordinate leaves empty.
+        self.0.splitmix()
+    }
+
+    fn write(&mut self, _: &[u8]) {
+        unreachable!("the map only hashes MapCoord keys");
+    }
+
+    fn write_i16(&mut self, i: i16) {
+        self.0 = self.0 << 16 | i as u16 as u64;
+    }
+}
 
 pub type MapInt = i16;
 pub type MapCoord = Coordinate<MapInt, MapInt>;
