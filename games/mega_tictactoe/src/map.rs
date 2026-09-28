@@ -60,7 +60,7 @@ impl Map {
         for (d, stride) in self.strides().into_iter().enumerate() {
             for (i, k) in ALONG {
                 let target = at.wrapping_add_signed(k * stride);
-                five |= self.cells[target].lines.place(d, i, player);
+                five |= self.reached(target).lines.place(d, i, player);
                 if k.abs() == 1 {
                     self.near_placed(target, coord + DIRS[d] * k as MapInt);
                 }
@@ -98,10 +98,7 @@ impl Map {
         for (d, stride) in self.strides().into_iter().enumerate() {
             for (i, k) in ALONG {
                 let target = at.wrapping_add_signed(k * stride);
-                self.cells[target].lines.clear(d, i);
-                if k.abs() == 1 {
-                    self.cells[target].near -= 1;
-                }
+                self.reached(target).lines.clear(d, i);
             }
         }
 
@@ -128,11 +125,9 @@ impl Map {
             .map(|placed| (placed.coord, placed.player))
     }
 
-    /// Counts a new stone next to the cell at `at`, making the cell a candidate if it is empty.
+    /// Makes the cell at `at`, next to a new stone, a candidate if it is empty and not one yet.
     fn near_placed(&mut self, at: usize, coord: MapCoord) {
-        let cell = &mut self.cells[at];
-        cell.near += 1;
-        // An empty cell next to a stone is a candidate already, so this only fires on the first.
+        let cell = self.reached(at);
         if cell.pos == NONE && cell.lines.owner().is_none() {
             self.add_candidate(at, coord);
         }
@@ -166,6 +161,14 @@ impl Map {
             self.candidates.push(coord);
         }
         self.cells[at].pos = pos;
+    }
+
+    /// The cell at `at`, which must be in the lines of a stone on the board.
+    fn reached(&mut self, at: usize) -> &mut Cell {
+        debug_assert!(at < self.cells.len());
+        // SAFETY: `fit` grows the grid to hold every cell in a stone's lines before placing it,
+        // and the grid never shrinks.
+        unsafe { self.cells.get_unchecked_mut(at) }
     }
 
     /// How far apart neighbouring cells along each of `DIRS` are in `cells`.
@@ -276,15 +279,12 @@ const NONE: u16 = u16::MAX;
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Cell {
     lines: FourLines,
-    /// Stones on the 8 cells around this one.
-    near: u8,
     /// Where this cell is in `Map::candidates`, or `NONE`.
     pos: u16,
 }
 impl Cell {
     const EMPTY: Self = Self {
         lines: FourLines([Line(Bits(0)); 4]),
-        near: 0,
         pos: NONE,
     };
 }
