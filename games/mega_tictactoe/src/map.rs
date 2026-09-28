@@ -57,22 +57,12 @@ impl Map {
 
         self.reached(at).lines.place_center(player);
         // Per direction, the stones from four cells behind to four ahead, a 16-bit lane each.
-        let mut runs = 0u64;
-        for (d, stride) in self.strides().into_iter().enumerate() {
-            let (mut behind, mut ahead) = (0, 0);
-            for (i, k) in ALONG {
-                let target = at.wrapping_add_signed(k * stride);
-                let line = self.reached(target).lines.place(d, i, player);
-                match k {
-                    // The lines centered two cells away reach four past the stone.
-                    -2 => behind = line.stones_of(player),
-                    2 => ahead = line.stones_of(player),
-                    _ => self.near_placed(target, coord + DIRS[d] * k as MapInt),
-                }
-            }
-            let nine = behind | ahead << (WIDTH - 1);
-            runs |= (nine as u64) << (16 * d);
-        }
+        // Spelled out rather than looped, so each direction's stride is a constant multiple.
+        let strides = self.strides();
+        let runs = self.place_along(at, coord, player, 0, strides[0])
+            | self.place_along(at, coord, player, 1, strides[1]) << 16
+            | self.place_along(at, coord, player, 2, strides[2]) << 32
+            | self.place_along(at, coord, player, 3, strides[3]) << 48;
         let five = five_in_a_lane(runs);
 
         let added = (self.candidates.len() - before) as u8;
@@ -131,6 +121,31 @@ impl Map {
         self.history
             .iter()
             .map(|placed| (placed.coord, placed.player))
+    }
+
+    /// Adds the stone at `at` to the lines in direction `d` that it is in, besides its own.
+    /// Returns its owner's stones from four cells behind it to four ahead, as the low nine bits.
+    #[inline(always)]
+    fn place_along(
+        &mut self,
+        at: usize,
+        coord: MapCoord,
+        player: u8,
+        d: usize,
+        stride: isize,
+    ) -> u64 {
+        let (mut behind, mut ahead) = (0, 0);
+        for (i, k) in ALONG {
+            let target = at.wrapping_add_signed(k * stride);
+            let line = self.reached(target).lines.place(d, i, player);
+            match k {
+                // The lines centered two cells away reach four past the stone.
+                -2 => behind = line.stones_of(player),
+                2 => ahead = line.stones_of(player),
+                _ => self.near_placed(target, coord + DIRS[d] * k as MapInt),
+            }
+        }
+        (behind | ahead << (WIDTH - 1)) as u64
     }
 
     /// Makes the cell at `at`, next to a new stone, a candidate if it is empty and not one yet.
