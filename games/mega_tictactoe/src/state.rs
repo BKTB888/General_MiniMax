@@ -7,11 +7,15 @@ use general_minimax::{
     result::{GameResult, get_player_color},
     state::GameState,
 };
+use smallvec::SmallVec;
 
 use crate::map::{Map, MapCoord, MapInt};
 
 /// Empty cells drawn around `bounds` on every side.
 pub const BORDER: MapInt = 2;
+
+/// Candidate moves held without a heap allocation.
+const INLINE_MOVES: usize = 64;
 
 #[derive(Clone, Default)]
 pub struct KInARowState {
@@ -34,8 +38,8 @@ impl From<Vec<MapCoord>> for KInARowState {
 
 impl GameState for KInARowState {
     type Choice = MapCoord;
-    // Unbounded on an infinite board.
-    type Moves = Vec<Self::Choice>;
+    // Unbounded on an infinite board, but usually few enough to skip the heap.
+    type Moves = SmallVec<[Self::Choice; INLINE_MOVES]>;
     const NUM_P: u8 = 2;
 
     fn make_move(&mut self, coord: Self::Choice) {
@@ -59,7 +63,7 @@ impl GameState for KInARowState {
     }
 
     fn candidate_moves(&self) -> Self::Moves {
-        self.cells.candidates().to_vec()
+        SmallVec::from_slice(self.cells.candidates())
     }
 
     fn is_valid(&self, choice: Self::Choice) -> bool {

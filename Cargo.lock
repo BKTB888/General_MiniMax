@@ -558,6 +558,7 @@ dependencies = [
  "criterion",
  "crossterm",
  "general_minimax",
+ "smallvec",
 ]
 
 [[package]]
