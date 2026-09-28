@@ -11,6 +11,7 @@ smallvec = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+rayon = { workspace = true }
 general_minimax = { workspace = true, features = ["bench"] }
 
 [[bench]]

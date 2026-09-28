@@ -1,18 +1,15 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use general_minimax::{
-    player::{
-        evals::stupid_eval,
-        search::{ABSearch, Search, alphabeta, alphabeta_tt, minimax},
-    },
+    player::search::{ABSearch, Search, alphabeta, alphabeta_tt, minimax},
     utils::position,
 };
-use mega_tictactoe::state::FiveInRowState;
+use mega_tictactoe::{eval, state::FiveInRowState};
 
 /// One root search at a fixed depth: alphabeta with and without the transposition table, and
 /// minimax, which runs on rayon so its time depends on free cores.
 fn search(c: &mut Criterion) {
     let mut state: FiveInRowState = position(0, 8);
-    let plain = alphabeta(stupid_eval);
+    let plain = alphabeta(eval);
 
     let mut group = c.benchmark_group("five_in_row");
     for depth in [1, 2] {
@@ -22,9 +19,9 @@ fn search(c: &mut Criterion) {
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
             // A fresh table every iteration; a kept one would already hold this search.
-            b.iter(|| alphabeta_tt(stupid_eval).find_best(&mut state, depth, None))
+            b.iter(|| alphabeta_tt(eval).find_best(&mut state, depth, None))
         });
-        let mut mm = minimax(stupid_eval).to_player(depth);
+        let mut mm = minimax(eval).to_player(depth);
         group.bench_function(BenchmarkId::new("minimax", depth), |b| {
             b.iter(|| mm(&state))
         });

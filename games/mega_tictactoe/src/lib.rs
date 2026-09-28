@@ -7,6 +7,9 @@
 )]
 #![allow(incomplete_features)]
 
+mod evaluation;
 pub(crate) mod map;
 pub mod player;
 pub mod state;
+
+pub use evaluation::eval;

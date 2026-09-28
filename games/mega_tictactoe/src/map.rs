@@ -26,6 +26,8 @@ pub struct Map {
     candidates: Vec<MapCoord>,
     /// Every stone in the order placed.
     history: Vec<Placed>,
+    /// What `windows` returns, as 16 bits per count, with player 0's in the low 64 bits.
+    windows: u128,
 }
 
 impl Default for Map {
@@ -38,6 +40,7 @@ impl Default for Map {
             corner: Coordinate(-half, -half),
             candidates: Vec::new(),
             history: Vec::new(),
+            windows: 0,
         };
         let at = map.index(Coordinate(0, 0));
         map.grid().add_candidate(at, Coordinate(0, 0));
@@ -54,18 +57,21 @@ impl Map {
             self.remove_candidate(at, was_at);
         }
         let before = self.candidates.len();
+        let windows = self.windows;
 
-        self.grid().reached(at).place_center(player);
         let strides = self.strides();
         // Borrowed once, so the grid's address stays in a register rather than being reloaded
         // from `self` after every store.
         let mut grid = self.grid();
+        let change = grid.reached(at).place_center(player);
+        grid.count(change);
         // Per direction, the stones from four cells behind to four ahead, a 16-bit lane each.
         // Four calls rather than a loop, which the compiler left rolled, reloading each stride.
         let runs = grid.place_along(at, coord, player, 0, strides[0])
             | grid.place_along(at, coord, player, 1, strides[1]) << 16
             | grid.place_along(at, coord, player, 2, strides[2]) << 32
             | grid.place_along(at, coord, player, 3, strides[3]) << 48;
+        self.windows = grid.windows;
         let five = five_in_a_lane(runs);
 
         let added = (self.candidates.len() - before) as u8;
@@ -74,6 +80,7 @@ impl Map {
             player,
             was_at,
             added,
+            windows,
         });
         five
     }
@@ -84,8 +91,10 @@ impl Map {
             coord,
             was_at,
             added,
+            windows,
             ..
         } = self.history.pop().expect("no stone to undo");
+        self.windows = windows;
         let at = self.index(coord);
         // The neighbours this stone made candidates went on the end, and everything added after
         // them has been undone already.
@@ -118,6 +127,13 @@ impl Map {
     /// Empty cells next to a stone, and the origin while it is empty.
     pub fn candidates(&self) -> &[MapCoord] {
         &self.candidates
+    }
+
+    /// How many windows, five cells in a row holding stones of `player` only, hold 1, 2, 3 and
+    /// 4 of them.
+    pub fn windows(&self, player: u8) -> [u16; 4] {
+        let counts = (self.windows >> (64 * player)) as u64;
+        std::array::from_fn(|n| (counts >> (16 * n)) as u16)
     }
 
     /// Every stone, as (coordinate, owner), in the order placed.
@@ -154,6 +170,7 @@ impl Map {
         Grid {
             cells: &mut self.cells,
             candidates: &mut self.candidates,
+            windows: self.windows,
         }
     }
 
@@ -252,6 +269,9 @@ impl Map {
 struct Grid<'a> {
     cells: &'a mut [Cell],
     candidates: &'a mut Vec<MapCoord>,
+    /// A copy of `Map::windows`, which `place` writes back. Behind a `&mut` it went through
+    /// memory at every count, since `near_placed` may call out to grow `candidates`.
+    windows: u128,
 }
 
 impl Grid<'_> {
@@ -271,15 +291,21 @@ impl Grid<'_> {
             let target = at.wrapping_add_signed(k * stride);
             let i = (CENTER as isize - k) as u8;
             let line = &mut self.reached(target).lines[d];
-            line.set(i, player);
+            let change = line.set(i, player);
             match k {
                 // The lines centered two cells away reach four past the stone.
                 -2 => behind = line.stones_of(player),
                 2 => ahead = line.stones_of(player),
                 _ => self.near_placed(target, coord + DIRS[d] * k as MapInt),
             }
+            self.count(change);
         }
         (behind | ahead << (LINE_LEN - 1)) as u64
+    }
+
+    /// Adds `change`, from `Line::set`, to the window counts.
+    fn count(&mut self, change: u128) {
+        self.windows = self.windows.wrapping_add(change);
     }
 
     /// Makes the cell at `at`, next to a new stone, a candidate if it is empty and not one yet.
@@ -306,13 +332,14 @@ impl Grid<'_> {
     }
 }
 
-/// Equal when the stones, candidates and every cell's lines match, whatever size each grid has
-/// grown to.
+/// Equal when the stones, candidates, window counts and every cell's lines match, whatever size
+/// each grid has grown to.
 #[cfg(test)]
 impl PartialEq for Map {
     fn eq(&self, other: &Self) -> bool {
         self.history == other.history
             && self.candidates == other.candidates
+            && self.windows == other.windows
             && self.cells_match(other)
             && other.cells_match(self)
     }
@@ -347,11 +374,13 @@ impl Cell {
         lines: [Line(Bits(0)); 4],
         pos: NONE,
     };
-    /// Puts `player` on this cell's own coordinate.
-    fn place_center(&mut self, player: u8) {
+    /// Puts `player` on this cell's own coordinate. Returns the change to the window counts.
+    fn place_center(&mut self, player: u8) -> u128 {
+        let mut change = 0u128;
         for line in &mut self.lines {
-            line.set(CENTER, player);
+            change = change.wrapping_add(line.set(CENTER, player));
         }
+        change
     }
     /// The player on this cell's own coordinate, if any.
     fn owner(&self) -> Option<u8> {
@@ -373,6 +402,8 @@ struct Placed {
     was_at: u16,
     /// How many of its neighbours the stone made candidates.
     added: u8,
+    /// `Map::windows` before the stone.
+    windows: u128,
 }
 
 /// Cells per line. Player `p`'s stones are bits `LINE_LEN * p ..LINE_LEN * (p + 1)`.
@@ -383,9 +414,13 @@ const CENTER: u8 = LINE_LEN / 2;
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 struct Line(Bits<u16, 10>);
 impl Line {
-    fn set(&mut self, i: u8, player: u8) {
-        debug_assert!(i < LINE_LEN);
+    /// Puts `player` on cell `i`. Returns the change to the window counts, to add wrapping.
+    fn set(&mut self, i: u8, player: u8) -> u128 {
+        debug_assert!(i < LINE_LEN && self.get(i).is_none());
+        // The masks let the compiler drop the bounds checks.
+        let change = CHANGE[player as usize & 1][self.0.0 as usize & (1 << 2 * LINE_LEN) - 1];
         self.0.set(i + LINE_LEN * player);
+        change
     }
     fn clear(&mut self, i: u8) {
         debug_assert!(i < LINE_LEN);
@@ -403,6 +438,33 @@ impl Line {
         self.0.0 >> (LINE_LEN * player) & ALL
     }
 }
+
+/// `Line::set`'s result, by player and then by the line before. Only the number of stones each
+/// player has decides a line's count, so which cell is set makes no difference.
+const CHANGE: [[u128; 1 << (2 * LINE_LEN)]; 2] = {
+    /// A 1 in the count for lines holding `ours` stones of player 0 and `theirs` of player 1,
+    /// or 0 if no count holds them: they are empty, both players', or five.
+    const fn count(ours: u32, theirs: u32) -> u128 {
+        match (ours, theirs) {
+            (n @ 1..=4, 0) => 1 << (16 * (n - 1)),
+            (0, n @ 1..=4) => 1 << (64 + 16 * (n - 1)),
+            _ => 0,
+        }
+    }
+    let mut table = [[0; _]; 2];
+    let mut line = 0;
+    while line < table[0].len() {
+        let (ours, theirs) = (
+            (line & 0b11111).count_ones(),
+            (line >> LINE_LEN).count_ones(),
+        );
+        let before = count(ours, theirs);
+        table[0][line] = count(ours + 1, theirs).wrapping_sub(before);
+        table[1][line] = count(ours, theirs + 1).wrapping_sub(before);
+        line += 1;
+    }
+    table
+};
 
 const BITS_OF<T>: u8 = (size_of::<T>() * 8) as u8;
 
@@ -510,6 +572,26 @@ mod tests {
                 run(dir) + run(-dir) + 1 >= 5
             })
         }
+        fn windows(&self, player: u8) -> [u16; 4] {
+            let starts: BTreeSet<_> = self
+                .0
+                .keys()
+                .flat_map(|&stone| {
+                    DIRS.iter()
+                        .flat_map(move |&dir| (0..5).map(move |k| (stone + dir * -k, dir)))
+                })
+                .collect();
+            let mut counts = [0; 4];
+            for (start, dir) in starts {
+                let owners: Vec<_> = (0..5)
+                    .filter_map(|k| self.0.get(&(start + dir * k)))
+                    .collect();
+                if owners.len() < 5 && owners.iter().all(|&&owner| owner == player) {
+                    counts[owners.len() - 1] += 1;
+                }
+            }
+            counts
+        }
         fn candidates(&self) -> BTreeSet<MapCoord> {
             let near = self.0.keys().flat_map(|&stone| {
                 DIRS.iter()
@@ -578,6 +660,13 @@ mod tests {
                 }
                 for (&coord, &player) in &naive.0 {
                     assert_eq!(map.get(coord), Some(player));
+                }
+                for player in 0..2 {
+                    assert_eq!(
+                        map.windows(player),
+                        naive.windows(player),
+                        "player {player}"
+                    );
                 }
             }
         }

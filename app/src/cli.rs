@@ -40,7 +40,9 @@ impl CLI {
         match self.game {
             GameKind::Mancala => self.play::<MancalaState>(mancala::eval, mancala::human),
             GameKind::Connect4 => self.play::<ConnectKState<7, 6>>(stupid_eval, human),
-            GameKind::FiveInRow => self.play::<FiveInRowState>(stupid_eval, human_five_in_row),
+            GameKind::FiveInRow => {
+                self.play::<FiveInRowState>(mega_tictactoe::eval, human_five_in_row)
+            }
         }
     }
 

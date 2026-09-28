@@ -87,6 +87,12 @@ impl GameState for FiveInRowState {
 }
 
 impl FiveInRowState {
+    /// How many windows, five cells in a row holding stones of `player` only, hold 1, 2, 3 and
+    /// 4 of them.
+    pub fn windows(&self, player: u8) -> [u16; 4] {
+        self.cells.windows(player)
+    }
+
     /// The lowest and highest row and column holding a piece, as `(min, max)`. `(0, 0)` for
     /// both on an empty board.
     pub fn bounds(&self) -> (MapCoord, MapCoord) {
