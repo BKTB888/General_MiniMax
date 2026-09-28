@@ -57,7 +57,7 @@ impl Map {
 
         self.reached(at).lines.place_center(player);
         // Per direction, the stones from four cells behind to four ahead, a 16-bit lane each.
-        // Spelled out rather than looped, so each direction's stride is a constant multiple.
+        // Four calls rather than a loop, which the compiler left rolled, reloading each stride.
         let strides = self.strides();
         let runs = self.place_along(at, coord, player, 0, strides[0])
             | self.place_along(at, coord, player, 1, strides[1]) << 16
