@@ -48,15 +48,14 @@ impl Default for Map {
 impl Map {
     /// Puts `player`'s stone on the empty `coord`. Returns whether it completes five in a row.
     pub fn place(&mut self, coord: MapCoord, player: u8) -> bool {
-        self.fit(coord);
-        let at = self.index(coord);
-        let was_at = self.cells[at].pos;
+        let at = self.fit(coord);
+        let was_at = self.reached(at).pos;
         if was_at != NONE {
-            self.remove_candidate(was_at);
+            self.remove_candidate(at, was_at);
         }
         let before = self.candidates.len();
 
-        self.cells[at].lines.place_center(player);
+        self.reached(at).lines.place_center(player);
         // Per direction, the stones from four cells behind to four ahead, a 16-bit lane each.
         let mut runs = 0u64;
         for (d, stride) in self.strides().into_iter().enumerate() {
@@ -149,17 +148,16 @@ impl Map {
     }
 
     /// Takes the candidate at `pos` out of the list, moving the last one into its place.
-    fn remove_candidate(&mut self, pos: u16) {
-        let taken = self.candidates.swap_remove(pos as usize);
-        let at = self.index(taken);
-        self.cells[at].pos = NONE;
+    fn remove_candidate(&mut self, at: usize, pos: u16) {
+        self.candidates.swap_remove(pos as usize);
+        self.reached(at).pos = NONE;
         if let Some(&moved) = self.candidates.get(pos as usize) {
             let m = self.index(moved);
             self.cells[m].pos = pos;
         }
     }
 
-    /// Puts `coord`, at `at`, back at `pos` in the list, undoing `remove_candidate(pos)`.
+    /// Puts `coord`, at `at`, back at `pos` in the list, undoing `remove_candidate(at, pos)`.
     fn restore_candidate(&mut self, at: usize, coord: MapCoord, pos: u16) {
         if let Some(&moved) = self.candidates.get(pos as usize) {
             let m = self.index(moved);
@@ -205,18 +203,18 @@ impl Map {
         (along(r, self.origin.0), along(c, self.origin.1))
     }
 
-    /// Grows the grid if a stone on `coord` would have lines reaching past its edge.
-    fn fit(&mut self, Coordinate(r, c): MapCoord) {
-        let reach = CENTER as MapInt;
-        let corners = [
-            Coordinate(r - reach, c - reach),
-            Coordinate(r + reach, c + reach),
-        ];
-        if corners
-            .iter()
-            .any(|&corner| self.try_index(corner).is_none())
-        {
-            self.grow(Coordinate(r, c));
+    /// Where `coord` is in `cells`, growing the grid first if a stone there would have lines
+    /// reaching past its edge.
+    fn fit(&mut self, coord: MapCoord) -> usize {
+        let (r, c) = self.offset(coord);
+        let reach = CENTER as usize;
+        let room = self.width - 2 * reach;
+        // An offset under `reach` wraps around to a huge one, so one compare covers both edges.
+        if r.wrapping_sub(reach) < room && c.wrapping_sub(reach) < room {
+            r * self.width + c
+        } else {
+            self.grow(coord);
+            self.index(coord)
         }
     }
 
