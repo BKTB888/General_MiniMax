@@ -7,7 +7,6 @@
 )]
 #![allow(incomplete_features)]
 
-// pub mod evaluation;
 pub(crate) mod map;
 pub mod player;
 pub mod state;

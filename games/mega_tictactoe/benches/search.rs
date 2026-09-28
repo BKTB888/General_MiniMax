@@ -6,14 +6,12 @@ use general_minimax::{
     },
     utils::position,
 };
-use mega_tictactoe::state::KInARowState;
-
-type FiveInRow = KInARowState;
+use mega_tictactoe::state::FiveInRowState;
 
 /// One root search at a fixed depth: alphabeta with and without the transposition table, and
 /// minimax, which runs on rayon so its time depends on free cores.
 fn search(c: &mut Criterion) {
-    let mut state: FiveInRow = position(0, 8);
+    let mut state: FiveInRowState = position(0, 8);
     let plain = alphabeta(stupid_eval);
 
     let mut group = c.benchmark_group("five_in_row");

@@ -4,13 +4,11 @@ use general_minimax::{
     state::GameState,
     utils::{node_ops, position},
 };
-use mega_tictactoe::state::KInARowState;
-
-type FiveInRow = KInARowState;
+use mega_tictactoe::state::FiveInRowState;
 
 /// The per-node operations every search repeats.
 fn ops(c: &mut Criterion) {
-    let state: FiveInRow = position(0, 8);
+    let state: FiveInRowState = position(0, 8);
 
     let mut group = c.benchmark_group("five_in_row_node_ops");
     node_ops(&mut group, state.clone(), stupid_eval);

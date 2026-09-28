@@ -3,15 +3,13 @@ use general_minimax::{
     game::play_multiple,
     player::players::{creator_from_seed, randy},
 };
-use mega_tictactoe::state::KInARowState;
-
-type FiveInRow = KInARowState;
+use mega_tictactoe::state::FiveInRowState;
 
 const GAMES: u32 = 100;
 
 /// Whole games between seeded random players, from the empty board to a result.
 fn full_game(c: &mut Criterion) {
-    let start = FiveInRow::default();
+    let start = FiveInRowState::default();
 
     let mut group = c.benchmark_group("five_in_row_full_game");
     group.bench_function(BenchmarkId::new("random", GAMES), |b| {

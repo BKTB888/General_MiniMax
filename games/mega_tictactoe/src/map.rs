@@ -6,7 +6,7 @@ pub type MapInt = i16;
 pub type MapCoord = Coordinate<MapInt, MapInt>;
 
 /// One direction per line through a cell: vertical, horizontal and the two diagonals.
-pub const DIRS: [MapCoord; 4] = [
+const DIRS: [MapCoord; 4] = [
     Coordinate(1, 0),
     Coordinate(0, 1),
     Coordinate(1, 1),
@@ -21,7 +21,7 @@ pub struct Map {
     cells: Vec<Cell>,
     width: usize,
     /// The coordinate of `cells[0]`.
-    origin: MapCoord,
+    corner: MapCoord,
     /// Empty cells next to a stone, and the origin while it is empty.
     candidates: Vec<MapCoord>,
     /// Every stone in the order placed.
@@ -35,12 +35,12 @@ impl Default for Map {
         let mut map = Self {
             cells: vec![Cell::EMPTY; START * START],
             width: START,
-            origin: Coordinate(-half, -half),
+            corner: Coordinate(-half, -half),
             candidates: Vec::new(),
             history: Vec::new(),
         };
-        let origin = map.index(Coordinate(0, 0));
-        map.add_candidate(origin, Coordinate(0, 0));
+        let at = map.index(Coordinate(0, 0));
+        map.grid().add_candidate(at, Coordinate(0, 0));
         map
     }
 }
@@ -49,20 +49,23 @@ impl Map {
     /// Puts `player`'s stone on the empty `coord`. Returns whether it completes five in a row.
     pub fn place(&mut self, coord: MapCoord, player: u8) -> bool {
         let at = self.fit(coord);
-        let was_at = self.reached(at).pos;
+        let was_at = self.grid().reached(at).pos;
         if was_at != NONE {
             self.remove_candidate(at, was_at);
         }
         let before = self.candidates.len();
 
-        self.reached(at).lines.place_center(player);
+        self.grid().reached(at).place_center(player);
+        let strides = self.strides();
+        // Borrowed once, so the grid's address stays in a register rather than being reloaded
+        // from `self` after every store.
+        let mut grid = self.grid();
         // Per direction, the stones from four cells behind to four ahead, a 16-bit lane each.
         // Four calls rather than a loop, which the compiler left rolled, reloading each stride.
-        let strides = self.strides();
-        let runs = self.place_along(at, coord, player, 0, strides[0])
-            | self.place_along(at, coord, player, 1, strides[1]) << 16
-            | self.place_along(at, coord, player, 2, strides[2]) << 32
-            | self.place_along(at, coord, player, 3, strides[3]) << 48;
+        let runs = grid.place_along(at, coord, player, 0, strides[0])
+            | grid.place_along(at, coord, player, 1, strides[1]) << 16
+            | grid.place_along(at, coord, player, 2, strides[2]) << 32
+            | grid.place_along(at, coord, player, 3, strides[3]) << 48;
         let five = five_in_a_lane(runs);
 
         let added = (self.candidates.len() - before) as u8;
@@ -89,14 +92,15 @@ impl Map {
         for _ in 0..added {
             let neighbour = self.candidates.pop().unwrap();
             let n = self.index(neighbour);
-            self.cells[n].pos = NONE;
+            self.grid().reached(n).pos = NONE;
         }
 
-        self.cells[at].lines.clear_center();
+        self.grid().reached(at).clear_center();
         for (d, stride) in self.strides().into_iter().enumerate() {
-            for (i, k) in ALONG {
+            for k in ALONG {
                 let target = at.wrapping_add_signed(k * stride);
-                self.reached(target).lines.clear(d, i);
+                let i = (CENTER as isize - k) as u8;
+                self.grid().reached(target).lines[d].clear(i);
             }
         }
 
@@ -108,7 +112,7 @@ impl Map {
 
     /// The player whose stone is on `coord`, if any.
     pub fn get(&self, coord: MapCoord) -> Option<u8> {
-        self.cells[self.try_index(coord)?].lines.owner()
+        self.cells[self.try_index(coord)?].owner()
     }
 
     /// Empty cells next to a stone, and the origin while it is empty.
@@ -123,52 +127,13 @@ impl Map {
             .map(|placed| (placed.coord, placed.player))
     }
 
-    /// Adds the stone at `at` to the lines in direction `d` that it is in, besides its own.
-    /// Returns its owner's stones from four cells behind it to four ahead, as the low nine bits.
-    #[inline(always)]
-    fn place_along(
-        &mut self,
-        at: usize,
-        coord: MapCoord,
-        player: u8,
-        d: usize,
-        stride: isize,
-    ) -> u64 {
-        let (mut behind, mut ahead) = (0, 0);
-        for (i, k) in ALONG {
-            let target = at.wrapping_add_signed(k * stride);
-            let line = self.reached(target).lines.place(d, i, player);
-            match k {
-                // The lines centered two cells away reach four past the stone.
-                -2 => behind = line.stones_of(player),
-                2 => ahead = line.stones_of(player),
-                _ => self.near_placed(target, coord + DIRS[d] * k as MapInt),
-            }
-        }
-        (behind | ahead << (WIDTH - 1)) as u64
-    }
-
-    /// Makes the cell at `at`, next to a new stone, a candidate if it is empty and not one yet.
-    fn near_placed(&mut self, at: usize, coord: MapCoord) {
-        let cell = self.reached(at);
-        if cell.pos == NONE && cell.lines.owner().is_none() {
-            self.add_candidate(at, coord);
-        }
-    }
-
-    fn add_candidate(&mut self, at: usize, coord: MapCoord) {
-        debug_assert!(self.candidates.len() < NONE as usize);
-        self.cells[at].pos = self.candidates.len() as u16;
-        self.candidates.push(coord);
-    }
-
     /// Takes the candidate at `pos` out of the list, moving the last one into its place.
     fn remove_candidate(&mut self, at: usize, pos: u16) {
         self.candidates.swap_remove(pos as usize);
-        self.reached(at).pos = NONE;
+        self.grid().reached(at).pos = NONE;
         if let Some(&moved) = self.candidates.get(pos as usize) {
             let m = self.index(moved);
-            self.cells[m].pos = pos;
+            self.grid().reached(m).pos = pos;
         }
     }
 
@@ -176,21 +141,20 @@ impl Map {
     fn restore_candidate(&mut self, at: usize, coord: MapCoord, pos: u16) {
         if let Some(&moved) = self.candidates.get(pos as usize) {
             let m = self.index(moved);
-            self.cells[m].pos = self.candidates.len() as u16;
-            self.candidates.push(moved);
+            self.grid().add_candidate(m, moved);
             self.candidates[pos as usize] = coord;
+            self.grid().reached(at).pos = pos;
         } else {
-            self.candidates.push(coord);
+            // `coord` was last, so `pos` is the end of the list.
+            self.grid().add_candidate(at, coord);
         }
-        self.cells[at].pos = pos;
     }
 
-    /// The cell at `at`, which must be in the lines of a stone on the board.
-    fn reached(&mut self, at: usize) -> &mut Cell {
-        debug_assert!(at < self.cells.len());
-        // SAFETY: `fit` grows the grid to hold every cell in a stone's lines before placing it,
-        // and the grid never shrinks.
-        unsafe { self.cells.get_unchecked_mut(at) }
+    fn grid(&mut self) -> Grid<'_> {
+        Grid {
+            cells: &mut self.cells,
+            candidates: &mut self.candidates,
+        }
     }
 
     /// How far apart neighbouring cells along each of `DIRS` are in `cells`.
@@ -214,8 +178,8 @@ impl Map {
     /// `coord`'s row and column in the grid. Off the grid, one of them is `width` or more.
     fn offset(&self, Coordinate(r, c): MapCoord) -> (usize, usize) {
         // Wraps a negative offset to a huge one, so a single `<` catches both sides.
-        let along = |x: MapInt, origin: MapInt| (x as i32 - origin as i32) as usize;
-        (along(r, self.origin.0), along(c, self.origin.1))
+        let along = |x: MapInt, start: MapInt| (x as i32 - start as i32) as usize;
+        (along(r, self.corner.0), along(c, self.corner.1))
     }
 
     /// Where `coord` is in `cells`, growing the grid first if a stone there would have lines
@@ -235,9 +199,12 @@ impl Map {
 
     /// Replaces the grid with one twice as wide as the old grid and `coord`'s lines need
     /// together, with both in the middle.
+    // Rare, so kept out of `place` rather than inlined into every move.
+    #[cold]
+    #[inline(never)]
     fn grow(&mut self, Coordinate(r, c): MapCoord) {
         let reach = CENTER as i32;
-        let (top, left) = (self.origin.0 as i32, self.origin.1 as i32);
+        let (top, left) = (self.corner.0 as i32, self.corner.1 as i32);
         let last = self.width as i32 - 1;
         let (min_r, max_r) = (
             top.min(r as i32 - reach),
@@ -248,7 +215,7 @@ impl Map {
             (left + last).max(c as i32 + reach),
         );
         let width = 2 * (max_r - min_r).max(max_c - min_c) + 2;
-        let origin = Coordinate(
+        let corner = Coordinate(
             ((min_r + max_r - width) / 2) as MapInt,
             ((min_c + max_c - width) / 2) as MapInt,
         );
@@ -256,22 +223,23 @@ impl Map {
         let width = width as usize;
         let mut cells = vec![Cell::EMPTY; width * width];
         let (down, right) = (
-            (top - origin.0 as i32) as usize,
-            (left - origin.1 as i32) as usize,
+            (top - corner.0 as i32) as usize,
+            (left - corner.1 as i32) as usize,
         );
         for (row, old) in self.cells.chunks_exact(self.width).enumerate() {
             let start = (down + row) * width + right;
             cells[start..start + self.width].copy_from_slice(old);
         }
-        (self.cells, self.width, self.origin) = (cells, width, origin);
+        (self.cells, self.width, self.corner) = (cells, width, corner);
     }
 
     /// Whether every cell of `self` matches the cell on the same coordinate in `other`,
     /// counting cells off `other`'s grid as empty.
+    #[cfg(test)]
     fn cells_match(&self, other: &Self) -> bool {
         self.cells.iter().enumerate().all(|(i, cell)| {
             let (row, col) = ((i / self.width) as MapInt, (i % self.width) as MapInt);
-            let coord = self.origin + (row, col);
+            let coord = self.corner + (row, col);
             *cell
                 == other
                     .try_index(coord)
@@ -280,8 +248,67 @@ impl Map {
     }
 }
 
-/// Equal when they hold the same stones placed in the same order, whatever size each grid has
+/// `Map`'s cells and candidates, borrowed apart from the rest of it.
+struct Grid<'a> {
+    cells: &'a mut [Cell],
+    candidates: &'a mut Vec<MapCoord>,
+}
+
+impl Grid<'_> {
+    /// Adds the stone at `at` to the lines in direction `d` that it is in, besides its own.
+    /// Returns its owner's stones from four cells behind it to four ahead, as the low nine bits.
+    #[inline(always)]
+    fn place_along(
+        &mut self,
+        at: usize,
+        coord: MapCoord,
+        player: u8,
+        d: usize,
+        stride: isize,
+    ) -> u64 {
+        let (mut behind, mut ahead) = (0, 0);
+        for k in ALONG {
+            let target = at.wrapping_add_signed(k * stride);
+            let i = (CENTER as isize - k) as u8;
+            let line = &mut self.reached(target).lines[d];
+            line.set(i, player);
+            match k {
+                // The lines centered two cells away reach four past the stone.
+                -2 => behind = line.stones_of(player),
+                2 => ahead = line.stones_of(player),
+                _ => self.near_placed(target, coord + DIRS[d] * k as MapInt),
+            }
+        }
+        (behind | ahead << (LINE_LEN - 1)) as u64
+    }
+
+    /// Makes the cell at `at`, next to a new stone, a candidate if it is empty and not one yet.
+    fn near_placed(&mut self, at: usize, coord: MapCoord) {
+        let cell = self.reached(at);
+        if cell.pos == NONE && cell.owner().is_none() {
+            self.add_candidate(at, coord);
+        }
+    }
+
+    fn add_candidate(&mut self, at: usize, coord: MapCoord) {
+        debug_assert!(self.candidates.len() < NONE as usize);
+        self.reached(at).pos = self.candidates.len() as u16;
+        self.candidates.push(coord);
+    }
+
+    /// The cell at `at`, which must be inside the grid.
+    fn reached(&mut self, at: usize) -> &mut Cell {
+        debug_assert!(at < self.cells.len());
+        // SAFETY: every `at` is a stone, a cell in a stone's lines, or the origin. `fit` grows
+        // the grid to hold a stone's lines before placing it, the starting grid holds the origin,
+        // and the grid never shrinks.
+        unsafe { self.cells.get_unchecked_mut(at) }
+    }
+}
+
+/// Equal when the stones, candidates and every cell's lines match, whatever size each grid has
 /// grown to.
+#[cfg(test)]
 impl PartialEq for Map {
     fn eq(&self, other: &Self) -> bool {
         self.history == other.history
@@ -291,15 +318,18 @@ impl PartialEq for Map {
     }
 }
 
-/// For each line through a stone but its own cell's: the stone is cell `i` of the line
-/// centered `k = CENTER - i` steps along the line's direction.
-const ALONG: [(u8, isize); 4] = [(0, 2), (1, 1), (3, -1), (4, -2)];
+/// How many steps along a direction each line through a stone, besides its own cell's, is
+/// centered. The stone is cell `CENTER - k` of that line.
+const ALONG: [isize; 4] = [2, 1, -1, -2];
 
 /// Whether any 16-bit lane of `runs` has five bits set in a row. Only the low nine bits of each
 /// lane may be set.
 fn five_in_a_lane(runs: u64) -> bool {
-    // A lane's top bits are clear, so bits shifted in from the next lane die in the first `&`.
-    runs & runs >> 1 & runs >> 2 & runs >> 3 & runs >> 4 != 0
+    // Each bit marks the start of that many in a row. Every `&` has a left side whose top lane
+    // bits are clear, so bits shifted in from the next lane die there.
+    let two = runs & runs >> 1;
+    let four = two & two >> 2;
+    four & runs >> 4 != 0
 }
 
 /// `Cell::pos` and `Placed::was_at` for a cell that is not a candidate.
@@ -307,15 +337,32 @@ const NONE: u16 = u16::MAX;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Cell {
-    lines: FourLines,
+    /// The line centered on this cell in each of `DIRS`.
+    lines: [Line; 4],
     /// Where this cell is in `Map::candidates`, or `NONE`.
     pos: u16,
 }
 impl Cell {
     const EMPTY: Self = Self {
-        lines: FourLines([Line(Bits(0)); 4]),
+        lines: [Line(Bits(0)); 4],
         pos: NONE,
     };
+    /// Puts `player` on this cell's own coordinate.
+    fn place_center(&mut self, player: u8) {
+        for line in &mut self.lines {
+            line.set(CENTER, player);
+        }
+    }
+    /// The player on this cell's own coordinate, if any.
+    fn owner(&self) -> Option<u8> {
+        // Every line is centered on the cell's coordinate, so any of them will do.
+        self.lines[0].get(CENTER)
+    }
+    fn clear_center(&mut self) {
+        for line in &mut self.lines {
+            line.clear(CENTER);
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -328,62 +375,32 @@ struct Placed {
     added: u8,
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Debug)]
-struct FourLines([Line; 4]);
-impl FourLines {
-    /// Sets cell `i` of the line in direction `d`. Returns the line as it is now.
-    fn place(&mut self, d: usize, i: u8, player: u8) -> Line {
-        let line = &mut self.0[d];
-        line.set(i, player);
-        *line
-    }
-    /// Puts `player` on this cell's own coordinate.
-    fn place_center(&mut self, player: u8) {
-        for line in &mut self.0 {
-            line.set(CENTER, player);
-        }
-    }
-    /// The player on this cell's own coordinate, if any.
-    fn owner(&self) -> Option<u8> {
-        // Every line is centered on the cell's coordinate, so any of them will do.
-        self.0[0].get(CENTER)
-    }
-    fn clear_center(&mut self) {
-        for line in &mut self.0 {
-            line.clear(CENTER);
-        }
-    }
-    fn clear(&mut self, d: usize, i: u8) {
-        self.0[d].clear(i);
-    }
-}
-
-/// Cells per line. Player `p`'s stones are bits `WIDTH * p ..WIDTH * (p + 1)`.
-const WIDTH: u8 = 5;
+/// Cells per line. Player `p`'s stones are bits `LINE_LEN * p ..LINE_LEN * (p + 1)`.
+const LINE_LEN: u8 = 5;
 /// The cell of a line that its own coordinate sits on.
-const CENTER: u8 = WIDTH / 2;
+const CENTER: u8 = LINE_LEN / 2;
 
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 struct Line(Bits<u16, 10>);
 impl Line {
     fn set(&mut self, i: u8, player: u8) {
-        debug_assert!(i < WIDTH);
-        self.0.set(i + WIDTH * player);
+        debug_assert!(i < LINE_LEN);
+        self.0.set(i + LINE_LEN * player);
     }
     fn clear(&mut self, i: u8) {
-        debug_assert!(i < WIDTH);
+        debug_assert!(i < LINE_LEN);
         self.0.clear(i);
-        self.0.clear(i + WIDTH);
+        self.0.clear(i + LINE_LEN);
     }
     /// The player owning cell `i`, if any.
     fn get(&self, i: u8) -> Option<u8> {
-        debug_assert!(i < WIDTH);
-        (0..2).find(|&player| self.0.get(i + WIDTH * player))
+        debug_assert!(i < LINE_LEN);
+        (0..2).find(|&player| self.0.get(i + LINE_LEN * player))
     }
-    /// The cells holding `player`'s stones, as the low `WIDTH` bits.
+    /// The cells holding `player`'s stones, as the low `LINE_LEN` bits.
     fn stones_of(self, player: u8) -> u16 {
-        const ALL: u16 = (1 << WIDTH) - 1;
-        self.0.0 >> (WIDTH * player) & ALL
+        const ALL: u16 = (1 << LINE_LEN) - 1;
+        self.0.0 >> (LINE_LEN * player) & ALL
     }
 }
 

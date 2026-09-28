@@ -2,10 +2,10 @@ use general_minimax::{coordinate::Coordinate, state::GameState};
 
 use crate::{
     map::MapCoord,
-    state::{BORDER, KInARowState},
+    state::{BORDER, FiveInRowState},
 };
 
-pub fn human_kinrow(state: &KInARowState) -> MapCoord {
+pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
     use crossterm::{
         cursor::MoveTo,
         event::{
