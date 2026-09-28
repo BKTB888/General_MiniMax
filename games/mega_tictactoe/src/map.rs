@@ -46,10 +46,11 @@ pub struct Map {
 impl Map {
     /// Puts `player`'s stone on `coord`. Returns whether it completes five in a row.
     pub fn place(&mut self, coord: MapCoord, player: u8) -> bool {
-        let mut five = false;
+        // All four lines of `coord`'s own entry hold it at `CENTER`, so one lookup covers them.
+        let mut five = self.cells.entry(coord).or_default().place_center(player);
         for (d, &dir) in DIRS.iter().enumerate() {
             // `coord` is cell `i` of the line centered `CENTER - i` steps along `dir`.
-            for i in 0..WIDTH {
+            for i in (0..WIDTH).filter(|&i| i != CENTER) {
                 let center = coord + dir * (CENTER as MapInt - i as MapInt);
                 five |= self.cells.entry(center).or_default().place(d, i, player);
             }
@@ -68,16 +69,21 @@ impl Map {
     }
     /// Takes the stone off `coord`, which must hold one.
     pub fn remove(&mut self, coord: MapCoord) {
+        self.clear_in(coord, FourLines::clear_center);
         for (d, &dir) in DIRS.iter().enumerate() {
-            for i in 0..WIDTH {
+            for i in (0..WIDTH).filter(|&i| i != CENTER) {
                 let center = coord + dir * (CENTER as MapInt - i as MapInt);
-                let lines = self.cells.get_mut(&center).unwrap();
-                lines.clear(d, i);
-                // Keeps the map sparse, and equal to how it was before the stone.
-                if lines.is_empty() {
-                    self.cells.remove(&center);
-                }
+                self.clear_in(center, |lines| lines.clear(d, i));
             }
+        }
+    }
+    /// Runs `clear` on the entry at `at`, dropping the entry if that leaves it empty.
+    fn clear_in(&mut self, at: MapCoord, clear: impl FnOnce(&mut FourLines)) {
+        let lines = self.cells.get_mut(&at).unwrap();
+        clear(lines);
+        // Keeps the map sparse, and equal to how it was before the stone.
+        if lines.is_empty() {
+            self.cells.remove(&at);
         }
     }
 }
@@ -91,10 +97,24 @@ impl FourLines {
         line.set(i, player);
         line.is_five(player)
     }
+    /// Puts `player` on this entry's own coordinate. Returns whether any line is now five.
+    fn place_center(&mut self, player: u8) -> bool {
+        let mut five = false;
+        for line in &mut self.0 {
+            line.set(CENTER, player);
+            five |= line.is_five(player);
+        }
+        five
+    }
     /// The player on this entry's own coordinate, if any.
     fn owner(&self) -> Option<u8> {
         // Every line is centered on the entry's coordinate, so any of them will do.
         self.0[0].get(CENTER)
+    }
+    fn clear_center(&mut self) {
+        for line in &mut self.0 {
+            line.clear(CENTER);
+        }
     }
     fn clear(&mut self, d: usize, i: u8) {
         self.0[d].clear(i);
