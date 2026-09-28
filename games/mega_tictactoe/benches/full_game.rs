@@ -5,7 +5,7 @@ use general_minimax::{
 };
 use mega_tictactoe::state::KInARowState;
 
-type FiveInRow = KInARowState<5>;
+type FiveInRow = KInARowState;
 
 const GAMES: u32 = 100;
 

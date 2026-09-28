@@ -1,8 +1,11 @@
 use general_minimax::{coordinate::Coordinate, state::GameState};
 
-use crate::state::{BORDER, KInARowState, MapCoord};
+use crate::{
+    map::MapCoord,
+    state::{BORDER, KInARowState},
+};
 
-pub fn human_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> MapCoord {
+pub fn human_kinrow(state: &KInARowState) -> MapCoord {
     use crossterm::{
         cursor::MoveTo,
         event::{

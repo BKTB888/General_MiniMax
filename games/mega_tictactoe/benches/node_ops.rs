@@ -1,18 +1,19 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use general_minimax::{
+    player::evals::stupid_eval,
     state::GameState,
     utils::{node_ops, position},
 };
-use mega_tictactoe::{evaluation::eval_kinrow, state::KInARowState};
+use mega_tictactoe::state::KInARowState;
 
-type FiveInRow = KInARowState<5>;
+type FiveInRow = KInARowState;
 
 /// The per-node operations every search repeats.
 fn ops(c: &mut Criterion) {
     let state: FiveInRow = position(0, 8);
 
     let mut group = c.benchmark_group("five_in_row_node_ops");
-    node_ops(&mut group, state.clone(), eval_kinrow);
+    node_ops(&mut group, state.clone(), stupid_eval);
     group.bench_function("hash", |b| b.iter(|| state.hash()));
     group.finish();
 }

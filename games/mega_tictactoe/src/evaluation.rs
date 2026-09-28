@@ -5,11 +5,14 @@ use general_minimax::{
     state::GameState,
 };
 
-use crate::state::{DIRS, KInARowState, MapCoord};
+use crate::{
+    map::{DIRS, MapCoord},
+    state::KInARowState,
+};
 
 /// For a given player, sum score² over all maximal unblocked runs in every direction.
 /// A run is "unblocked" on one end if the cell beyond it is empty (not occupied by the opponent).
-fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, player: u8) -> f32 {
+fn player_score(state: &KInARowState, player: u8) -> f32 {
     let cells = state.cells();
 
     // Track which (coord, dir_index) pairs we've already counted
@@ -57,11 +60,11 @@ fn player_score<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>, pl
     total
 }
 
-pub fn eval_kinrow<const K: u8, const NUM_P: u8>(state: &KInARowState<K, NUM_P>) -> Score {
+pub fn eval_kinrow(state: &KInARowState) -> Score {
     let current = state.current_player();
 
     let my_score: f32 = player_score(state, current);
-    let opp_score: f32 = (0..NUM_P)
+    let opp_score: f32 = (0..KInARowState::NUM_P)
         .filter(|&p| p != current)
         .map(|p| player_score(state, p))
         .sum();

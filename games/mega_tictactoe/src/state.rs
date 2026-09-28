@@ -1,7 +1,6 @@
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::hash_map::Entry,
     fmt::{Display, Formatter, Result as FmtResult},
-    hash::{BuildHasherDefault, DefaultHasher},
 };
 
 use colored::Colorize;
@@ -12,25 +11,13 @@ use general_minimax::{
     state::GameState,
 };
 
-pub type MapInt = i16;
-pub type MapCoord = Coordinate<MapInt, MapInt>;
-/// `HashMap` with a fixed seed, so iteration order is the same on every run.
-type FixedMap<K, V> = HashMap<K, V, BuildHasherDefault<DefaultHasher>>;
-type Map = FixedMap<MapCoord, u8>;
-
-/// One direction per line through a cell: vertical, horizontal and the two diagonals.
-pub const DIRS: [MapCoord; 4] = [
-    Coordinate(1, 0),
-    Coordinate(0, 1),
-    Coordinate(1, 1),
-    Coordinate(1, -1),
-];
+use crate::map::{FixedMap, Map, MapCoord, MapInt};
 
 /// Empty cells drawn around `bounds` on every side.
 pub const BORDER: MapInt = 2;
 
 #[derive(Clone)]
-pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
+pub struct KInARowState {
     cells: Map,
     player: u8,
     candidate_moves_with_counts: FixedMap<MapCoord, u16>,
@@ -40,7 +27,7 @@ pub struct KInARowState<const K: u8, const NUM_P: u8 = 2> {
     move_stack: Vec<MapCoord>,
 }
 
-impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
+impl Default for KInARowState {
     fn default() -> Self {
         Self {
             cells: Map::default(),
@@ -54,7 +41,7 @@ impl<const K: u8, const NUM_P: u8> Default for KInARowState<K, NUM_P> {
     }
 }
 
-impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P> {
+impl From<Vec<MapCoord>> for KInARowState {
     fn from(coords: Vec<MapCoord>) -> Self {
         let mut result = Self::default();
         coords.into_iter().for_each(|coord| {
@@ -65,21 +52,19 @@ impl<const K: u8, const NUM_P: u8> From<Vec<MapCoord>> for KInARowState<K, NUM_P
     }
 }
 
-impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
+impl GameState for KInARowState {
     type Choice = MapCoord;
     // Unbounded on an infinite board.
     type Moves = Vec<Self::Choice>;
-    const NUM_P: u8 = NUM_P;
+    const NUM_P: u8 = 2;
 
     fn make_move(&mut self, coord: Self::Choice) {
         if self.result.is_none() {
-            self.cells.insert(coord, self.player);
+            let five = self.cells.place(coord, self.player);
             self.hash ^= zobrist_cell_key(coord, self.player);
-            self.result = self
-                .has_won_from(coord)
-                .then_some(GameResult::Player(self.player));
+            self.result = five.then_some(GameResult::Player(self.player));
 
-            self.player = (self.player + 1) % NUM_P;
+            self.player = (self.player + 1) % Self::NUM_P;
             let prior_count = self.candidate_moves_with_counts.remove(&coord).unwrap_or(0);
 
             self.add_candidates(coord, prior_count);
@@ -102,7 +87,7 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
     }
 
     fn is_valid(&self, choice: Self::Choice) -> bool {
-        !self.cells.contains_key(&choice)
+        self.cells.get(choice).is_none()
     }
 
     fn current_player(&self) -> u8 {
@@ -115,8 +100,8 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
 
     fn undo(&mut self) {
         let choice = self.move_stack.pop().unwrap();
-        self.cells.remove(&choice);
-        self.player = self.player.checked_sub(1).unwrap_or(NUM_P - 1);
+        self.cells.remove(choice);
+        self.player = self.player.checked_sub(1).unwrap_or(Self::NUM_P - 1);
         self.result = None;
         let (count, candidates) = self.move_history_with_candidates.remove(&choice).unwrap();
         for coord in candidates {
@@ -134,14 +119,14 @@ impl<const K: u8, const NUM_P: u8> GameState for KInARowState<K, NUM_P> {
     }
 }
 
-impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
+impl KInARowState {
     pub fn cells(&self) -> &Map {
         &self.cells
     }
     /// The lowest and highest row and column holding a piece, as `(min, max)`. `(0, 0)` for
     /// both on an empty board.
     pub fn bounds(&self) -> (MapCoord, MapCoord) {
-        let mut coords = self.cells.keys().copied();
+        let mut coords = self.cells.stones().map(|(coord, _)| coord);
         let Some(first) = coords.next() else {
             return Default::default();
         };
@@ -152,27 +137,6 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
             )
         })
     }
-    fn has_won_from(&self, from: MapCoord) -> bool {
-        for axis in DIRS {
-            let mut count = 1u8;
-
-            for dir in [axis, -axis] {
-                let mut coord = from + dir;
-                while let Some(&cell) = self.cells.get(&coord) {
-                    if cell != self.player {
-                        break;
-                    }
-                    count += 1;
-                    if count >= K {
-                        return true;
-                    }
-                    coord = coord + dir;
-                }
-            }
-        }
-
-        false
-    }
     fn add_candidates(&mut self, from: MapCoord, prior_count: u16) {
         const R: MapInt = 1;
         const NEIGHBOURS: [MapCoord; ((2 * R + 1).pow(2) - 1) as usize] = neighbour_offsets(R);
@@ -180,7 +144,7 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
         let candidates = NEIGHBOURS
             .iter()
             .map(|&coord| coord + from)
-            .filter(|coord| !self.cells.contains_key(coord))
+            .filter(|&coord| self.is_valid(coord))
             .collect::<Vec<_>>();
 
         candidates.iter().for_each(|coord| {
@@ -192,22 +156,14 @@ impl<const K: u8, const NUM_P: u8> KInARowState<K, NUM_P> {
         vec.extend(candidates);
     }
 }
-impl<const K: u8, const NUM_P: u8> Display for KInARowState<K, NUM_P> {
+impl Display for KInARowState {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let (Coordinate(min_r, min_c), Coordinate(max_r, max_c)) = self.bounds();
         for row in (min_r - BORDER..=max_r + BORDER).rev() {
             for col in min_c - BORDER..=max_c + BORDER {
                 let coord = Coordinate(row, col);
-                if let Some(&player) = self.cells.get(&coord) {
-                    // Choose a color for the player
-                    let colored = match player {
-                        0 => "O", // Red X
-                        1 => "X", // Blue O
-                        2 => "△", // Green triangle for player 2
-                        3 => "◇", // Magenta diamond for player 3
-                        _ => "?", // White ? for any extra player
-                    }
-                    .color(get_player_color(player));
+                if let Some(player) = self.cells.get(coord) {
+                    let colored = ["O", "X"][player as usize].color(get_player_color(player));
                     write!(f, "{colored}")?;
                 } else {
                     write!(f, "·")?;
@@ -225,84 +181,77 @@ mod tests {
 
     use super::*;
 
-    type KIR3 = KInARowState<3>;
-
     #[test]
     fn test_default_state() {
-        let state = KIR3::default();
+        let state = KInARowState::default();
         assert_eq!(state.player, 0);
-        assert!(state.cells.is_empty());
+        assert!(state.cells.stones().next().is_none());
     }
 
     #[test]
     fn test_make_move_changes_player_and_cells() {
-        let mut state = KIR3::default();
-        let coord = C(0, 0);
+        let mut state = KInARowState::default();
         state.make_move(C(0, 0));
-        assert_eq!(state.cells[&coord], 0);
+        assert_eq!(state.cells.get(C(0, 0)), Some(0));
         assert_eq!(state.player, 1);
 
         state.make_move(C(1, 0));
-        assert_eq!(state.cells[&C(1, 0)], 1);
+        assert_eq!(state.cells.get(C(1, 0)), Some(1));
         assert_eq!(state.player, 0);
     }
 
     #[test]
     fn test_try_get_result_detects_win() {
-        let mut state = KIR3::default();
-        state.make_move(C(0, 0)); // Player 0
-        state.make_move(C(0, 1)); // Player 1
-        state.make_move(C(1, 0)); // Player 0
-        state.make_move(C(1, 1)); // Player 1
-        state.make_move(C(2, 0)); // Player 0 wins
+        let mut state = KInARowState::default();
+        #[rustfmt::skip]
+        make_moves(&mut state, &[
+            C(0, 0), C(1, 0),
+            C(0, 1), C(1, 1),
+            C(0, 2), C(1, 2),
+            C(0, 3), C(1, 3),
+            C(0, 4), // Player 0 wins
+        ]);
 
-        let result = state.get_result();
-        assert!(matches!(result, Some(GameResult::Player(0))));
+        assert_eq!(state.get_result(), Some(GameResult::Player(0)));
     }
 
     #[test]
     fn test_try_get_result_no_win() {
-        let mut state = KIR3::default();
-        state.make_move(C(0, 0));
-        state.make_move(C(0, 1));
-        state.make_move(C(1, 0));
+        let mut state = KInARowState::default();
+        #[rustfmt::skip]
+        make_moves(&mut state, &[
+            C(0, 0), C(1, 0),
+            C(0, 1), C(1, 1),
+            C(0, 2), C(1, 2),
+            C(0, 3), // Player 0 has four
+        ]);
 
         assert_eq!(state.get_result(), None);
     }
 
     #[test]
-    fn complex() {
-        let state = KInARowState::<3>::from(vec![
-            // Player 0 (X), Player 1 (O) alternating, starting with X
-            C(9, 4),  // X
-            C(10, 4), // O
-            C(8, 4),  // X
-            C(11, 5), // O
-            C(7, 3),  // X
-            C(6, 8),  // O
-            C(6, 2),  // X
+    fn test_diagonal_win_through_negatives() {
+        #[rustfmt::skip]
+        let state = KInARowState::from(vec![
+            C(2, -2),  C(5, 5),
+            C(-2, 2),  C(5, 6),
+            C(0, 0),   C(5, 7),
+            C(1, -1),  C(-5, 7),
+            C(-1, 1), // Player 0 wins with a stone inside the line, not at an end
         ]);
 
         println!("{state}");
 
-        assert_eq!(state.get_result().unwrap(), GameResult::Player(0));
+        assert_eq!(state.get_result(), Some(GameResult::Player(0)));
     }
 
-    type KIR5 = KInARowState<5>;
-
-    fn make_moves<const K: u8, const NUM_P: u8>(
-        state: &mut KInARowState<K, NUM_P>,
-        moves: &[MapCoord],
-    ) {
+    fn make_moves(state: &mut KInARowState, moves: &[MapCoord]) {
         for &m in moves {
             state.make_move(m);
         }
     }
 
-    fn assert_states_eq<const K: u8, const NUM_P: u8>(
-        a: &KInARowState<K, NUM_P>,
-        b: &KInARowState<K, NUM_P>,
-    ) {
+    fn assert_states_eq(a: &KInARowState, b: &KInARowState) {
         assert_eq!(a.cells, b.cells, "cells differ");
         assert_eq!(a.player, b.player, "player differs");
         assert_eq!(
@@ -319,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_zobrist_changes_on_move() {
-        let s0 = KIR5::default();
+        let s0 = KInARowState::default();
         let mut s1 = s0.clone();
         s1.make_move(C(0, 0));
         assert_ne!(s0.hash, s1.hash);
@@ -327,53 +276,53 @@ mod tests {
 
     #[test]
     fn test_zobrist_same_position_same_hash() {
-        let mut a = KIR5::default();
+        let mut a = KInARowState::default();
         make_moves(&mut a, &[C(0, 0), C(1, 0), C(0, 1), C(1, 1)]);
-        let mut b = KIR5::default();
+        let mut b = KInARowState::default();
         make_moves(&mut b, &[C(0, 0), C(1, 0), C(0, 1), C(1, 1)]);
         assert_eq!(a.hash, b.hash);
 
         // Different move order, same final ownership: p0 owns (0,0)+(0,1), p1 owns (1,0)+(1,1).
-        let mut c = KIR5::default();
+        let mut c = KInARowState::default();
         make_moves(&mut c, &[C(0, 0), C(1, 0), C(0, 1), C(1, 1)]);
-        let mut d = KIR5::default();
+        let mut d = KInARowState::default();
         make_moves(&mut d, &[C(0, 1), C(1, 1), C(0, 0), C(1, 0)]);
         assert_eq!(c.hash, d.hash);
     }
 
     #[test]
     fn test_zobrist_distinct_for_distinct_positions() {
-        let mut a = KIR5::default();
+        let mut a = KInARowState::default();
         a.make_move(C(0, 0));
-        let mut b = KIR5::default();
+        let mut b = KInARowState::default();
         b.make_move(C(1, 0));
         assert_ne!(a.hash, b.hash);
     }
 
     #[test]
     fn test_zobrist_no_xor_cancellation() {
-        let mut a = KIR5::default();
+        let mut a = KInARowState::default();
         make_moves(&mut a, &[C(0, 0), C(1, 0), C(1, 1), C(0, 1)]);
-        let mut b = KIR5::default();
+        let mut b = KInARowState::default();
         make_moves(&mut b, &[C(1, 0), C(0, 0), C(0, 1), C(1, 1)]); // owners swapped
         assert_ne!(a.hash, b.hash);
-        assert_ne!(a.hash, KIR5::default().hash);
-        assert_ne!(b.hash, KIR5::default().hash);
+        assert_ne!(a.hash, KInARowState::default().hash);
+        assert_ne!(b.hash, KInARowState::default().hash);
     }
 
     #[test]
     fn test_zobrist_distinct_with_negative_coords() {
-        let mut a = KIR5::default();
+        let mut a = KInARowState::default();
         a.make_move(C(3, -1));
-        let mut b = KIR5::default();
+        let mut b = KInARowState::default();
         b.make_move(C(5, -1));
         assert_ne!(a.hash, b.hash);
     }
 
     #[test]
     fn test_undo_single_move_restores_default() {
-        let original = KIR5::default();
-        let mut s = KIR5::default();
+        let original = KInARowState::default();
+        let mut s = KInARowState::default();
         s.make_move(C(0, 0));
         s.undo();
         assert_states_eq(&s, &original);
@@ -381,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_undo_zobrist_round_trip() {
-        let mut s = KIR5::default();
+        let mut s = KInARowState::default();
         let h0 = s.hash;
         s.make_move(C(0, 0));
         assert_ne!(s.hash, h0);
@@ -391,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_undo_zobrist_round_trip_long_game() {
-        let mut s = KIR5::default();
+        let mut s = KInARowState::default();
         let h0 = s.hash;
         let moves = [
             C(0, 0),
@@ -416,8 +365,8 @@ mod tests {
 
     #[test]
     fn test_undo_chain_returns_to_default() {
-        let original = KIR5::default();
-        let mut s = KIR5::default();
+        let original = KInARowState::default();
+        let mut s = KInARowState::default();
         let moves = [
             C(0, 0),
             C(1, 0),
@@ -441,10 +390,16 @@ mod tests {
 
     #[test]
     fn test_undo_clears_winning_result() {
-        let mut s = KIR3::default();
-        make_moves(&mut s, &[C(0, 0), C(0, 1), C(1, 0), C(1, 1)]);
+        let mut s = KInARowState::default();
+        #[rustfmt::skip]
+        make_moves(&mut s, &[
+            C(0, 0), C(1, 0),
+            C(0, 1), C(1, 1),
+            C(0, 2), C(1, 2),
+            C(0, 3), C(1, 3),
+        ]);
         let snapshot = s.clone();
-        s.make_move(C(2, 0)); // p0 wins horizontally at y=0
+        s.make_move(C(0, 4)); // p0 wins along row 0
         assert_eq!(s.get_result(), Some(GameResult::Player(0)));
         s.undo();
         assert_eq!(s.get_result(), None);
@@ -453,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_undo_player_wrap_2p() {
-        let mut s = KIR5::default();
+        let mut s = KInARowState::default();
         assert_eq!(s.current_player(), 0);
         s.make_move(C(0, 0));
         assert_eq!(s.current_player(), 1);
@@ -463,8 +418,8 @@ mod tests {
 
     #[test]
     fn test_undo_nested_make_undo_pattern() {
-        let original = KIR5::default();
-        let mut s = KIR5::default();
+        let original = KInARowState::default();
+        let mut s = KInARowState::default();
         s.make_move(C(0, 0));
         let after_outer = s.clone();
         s.make_move(C(1, 0));

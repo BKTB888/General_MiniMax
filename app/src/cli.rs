@@ -10,7 +10,7 @@ use general_minimax::{
     state::GameState,
 };
 use mancala::state::MancalaState;
-use mega_tictactoe::{evaluation::eval_kinrow, player::human_kinrow, state::KInARowState};
+use mega_tictactoe::{player::human_kinrow, state::KInARowState};
 
 #[derive(Parser)]
 pub struct CLI {
@@ -40,7 +40,7 @@ impl CLI {
         match self.game {
             GameKind::Mancala => self.play::<MancalaState>(mancala::eval, mancala::human),
             GameKind::Connect4 => self.play::<ConnectKState<7, 6>>(stupid_eval, human),
-            GameKind::FiveInRow => self.play::<KInARowState<5>>(eval_kinrow, human_kinrow),
+            GameKind::FiveInRow => self.play::<KInARowState>(stupid_eval, human_kinrow),
         }
     }
 
