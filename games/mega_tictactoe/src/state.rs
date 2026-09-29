@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 use general_minimax::{
     coordinate::Coordinate,
     mixers::Splitmix,
@@ -13,6 +13,11 @@ use crate::map::{Map, MapCoord, MapInt};
 
 /// Empty cells drawn around `bounds` on every side.
 pub const BORDER: MapInt = 2;
+
+/// Terminal columns and rows one cell takes when displayed, the columns counting the grid line
+/// to its right.
+pub const CELL_WIDTH: MapInt = 2;
+pub const CELL_HEIGHT: MapInt = 1;
 
 /// Candidate moves held without a heap allocation.
 const INLINE_MOVES: usize = 64;
@@ -116,17 +121,30 @@ impl FiveInRowState {
 impl Display for FiveInRowState {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let (Coordinate(min_r, min_c), Coordinate(max_r, max_c)) = self.bounds();
+        let cols = min_c - BORDER..=max_c + BORDER;
+
         for row in (min_r - BORDER..=max_r + BORDER).rev() {
-            for col in min_c - BORDER..=max_c + BORDER {
-                let coord = Coordinate(row, col);
-                if let Some(player) = self.cells.get(coord) {
-                    let colored = ["O", "X"][player as usize].color(get_player_color(player));
-                    write!(f, "{colored}")?;
+            // Underlining draws the line between rows without a terminal row of its own. Each
+            // piece is underlined alone, since a stone's colour reset would also end the underline.
+            let line = |s: ColoredString| {
+                if row != min_r - BORDER {
+                    s.underline()
                 } else {
-                    write!(f, "·")?;
+                    s
                 }
-            }
-            writeln!(f, "\r")?; // newline after each row
+                .to_string()
+            };
+            let cells: Vec<String> = cols
+                .clone()
+                .map(|col| match self.cells.get(Coordinate(row, col)) {
+                    Some(player) => {
+                        line(["O", "X"][player as usize].color(get_player_color(player)))
+                    }
+                    None => line(" ".normal()),
+                })
+                .collect();
+            // `\r` because the human player draws in raw mode, where `\n` doesn't return the cursor.
+            writeln!(f, "{}\r", cells.join(&line("│".normal())))?;
         }
         Ok(())
     }

@@ -2,7 +2,7 @@ use general_minimax::{coordinate::Coordinate, state::GameState};
 
 use crate::{
     map::MapCoord,
-    state::{BORDER, FiveInRowState},
+    state::{BORDER, CELL_HEIGHT, CELL_WIDTH, FiveInRowState},
 };
 
 pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
@@ -28,8 +28,10 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
                 let term_col = m.column as i16 - col_offset as i16;
                 let term_row = m.row as i16 - row_offset as i16;
 
-                let board_col = term_col + (min_c - BORDER);
-                let board_row = (max_r + BORDER) - term_row;
+                // A click on a grid line counts for the cell left of it. `div_euclid` keeps a
+                // click left of or above the board off the board.
+                let board_col = term_col.div_euclid(CELL_WIDTH) + (min_c - BORDER);
+                let board_row = (max_r + BORDER) - term_row.div_euclid(CELL_HEIGHT);
 
                 let coord = Coordinate(board_row, board_col);
 
@@ -76,8 +78,9 @@ fn draw(state: &FiveInRowState, prompt: &str) -> (u16, u16, u16) {
     let (Coordinate(min_r, min_c), Coordinate(max_r, max_c)) = state.bounds();
 
     let (term_width, term_height) = size().unwrap_or((80, 24));
-    let board_width = (max_c - min_c + 1 + 2 * BORDER) as u16;
-    let board_height = (max_r - min_r + 1 + 2 * BORDER) as u16;
+    // The last column has no grid line after it.
+    let board_width = ((max_c - min_c + 1 + 2 * BORDER) * CELL_WIDTH - 1) as u16;
+    let board_height = ((max_r - min_r + 1 + 2 * BORDER) * CELL_HEIGHT) as u16;
     let col_offset = (term_width.saturating_sub(board_width)) / 2;
     let row_offset = (term_height.saturating_sub(board_height)) / 2;
 
