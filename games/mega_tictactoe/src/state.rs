@@ -46,7 +46,9 @@ impl GameState for FiveInRowState {
     // Unbounded on an infinite board, but usually few enough to skip the heap.
     type Moves = SmallVec<[Self::Choice; INLINE_MOVES]>;
     const NUM_P: u8 = 2;
-    const TT_BITS: u8 = 18;
+    // 20 evicts so much that a game of `alphabeta-tt:4` against `alphabeta-tt:6` takes twice as
+    // long.
+    const TT_BITS: u8 = 22;
 
     fn make_move(&mut self, coord: Self::Choice) {
         if self.result.is_none() {
