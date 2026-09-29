@@ -6,7 +6,7 @@
 #![allow(incomplete_features)]
 
 use connect_k::state::ConnectKState;
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use general_minimax::{
     player::{
         evals::stupid_eval,
@@ -34,6 +34,14 @@ fn search(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("alphabeta_tt", depth), |b| {
             // A fresh table every iteration; a kept one would already hold this search.
             b.iter(|| alphabeta_tt(stupid_eval).find_best(&mut state, depth, None))
+        });
+        group.bench_function(BenchmarkId::new("alphabeta_tt_search", depth), |b| {
+            // As above, with building and dropping the table left out of the time.
+            b.iter_batched_ref(
+                || alphabeta_tt(stupid_eval),
+                |search| search.find_best(&mut state, depth, None),
+                BatchSize::PerIteration,
+            )
         });
         group.bench_function(BenchmarkId::new("alphabeta_tt_iterative", depth), |b| {
             // A fresh table every iteration, kept across the depths with each depth's move
