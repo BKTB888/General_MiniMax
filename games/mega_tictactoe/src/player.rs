@@ -20,7 +20,7 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
     execute!(stdout, EnableMouseCapture).unwrap();
 
     let (Coordinate(_, min_c), Coordinate(max_r, _)) = state.bounds();
-    let (mut col_offset, mut row_offset, mut message_row) = draw(state);
+    let (mut col_offset, mut row_offset, mut message_row) = draw(state, "Click a cell");
 
     let result = loop {
         match event::read() {
@@ -34,6 +34,10 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
                 let coord = Coordinate(board_row, board_col);
 
                 if state.is_valid(coord) {
+                    // The board is drawn again only on the next turn, after the opponent's move.
+                    let mut next = state.clone();
+                    next.make_move(coord);
+                    draw(&next, "Waiting for the other player...");
                     break coord;
                 }
                 execute!(stdout, MoveTo(col_offset, message_row)).unwrap();
@@ -41,7 +45,9 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
                 let _ = std::io::Write::flush(&mut stdout);
             }
             // Changing the font size resizes the grid, so the board has to be centred again.
-            Ok(Event::Resize(..)) => (col_offset, row_offset, message_row) = draw(state),
+            Ok(Event::Resize(..)) => {
+                (col_offset, row_offset, message_row) = draw(state, "Click a cell")
+            }
             // Raw mode turns Ctrl-C into a key press instead of a SIGINT.
             Ok(Event::Key(k))
                 if k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL) =>
@@ -57,9 +63,9 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
     result
 }
 
-/// Clears the terminal and draws `state` centred with a prompt below it. Returns the board's
+/// Clears the terminal and draws `state` centred with `prompt` below it. Returns the board's
 /// column and row offset, and the row free for messages.
-fn draw(state: &FiveInRowState) -> (u16, u16, u16) {
+fn draw(state: &FiveInRowState, prompt: &str) -> (u16, u16, u16) {
     use crossterm::{
         cursor::MoveTo,
         execute,
@@ -83,7 +89,7 @@ fn draw(state: &FiveInRowState) -> (u16, u16, u16) {
     }
 
     execute!(stdout, MoveTo(col_offset, row_offset + board_height + 1)).unwrap();
-    print!("Click a cell:");
+    print!("{prompt}");
     let _ = std::io::Write::flush(&mut stdout);
 
     (col_offset, row_offset, row_offset + board_height + 2)
