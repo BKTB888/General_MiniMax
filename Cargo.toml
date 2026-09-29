@@ -4,7 +4,7 @@ members = [
     "general_minimax",
     "games/connect_k",
     "games/mancala",
-    "games/mega_tictactoe",
+    "games/five_in_row",
     "games/infinite_connect4",
     "app", "games/gomoku",
 ]
@@ -17,7 +17,7 @@ edition = "2024"
 general_minimax = { path = "general_minimax" }
 connect_k = { path = "games/connect_k" }
 mancala = { path = "games/mancala" }
-mega_tictactoe = { path = "games/mega_tictactoe" }
+five_in_row = { path = "games/five_in_row" }
 infinite_connect4 = { path = "games/infinite_connect4" }
 
 arrayvec = "0.7"

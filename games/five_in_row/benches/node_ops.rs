@@ -1,9 +1,9 @@
 use criterion::{Criterion, criterion_group, criterion_main};
+use five_in_row::{eval, state::FiveInRowState};
 use general_minimax::{
     state::GameState,
     utils::{node_ops, position},
 };
-use mega_tictactoe::{eval, state::FiveInRowState};
 
 /// The per-node operations every search repeats.
 fn ops(c: &mut Criterion) {

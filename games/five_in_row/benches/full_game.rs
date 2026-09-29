@@ -1,4 +1,5 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use five_in_row::{eval, player::human_five_in_row, state::FiveInRowState};
 use general_minimax::{
     game::play_multiple,
     player::{
@@ -6,7 +7,6 @@ use general_minimax::{
         players::{creator_from_seed, randy},
     },
 };
-use mega_tictactoe::{eval, player::human_five_in_row, state::FiveInRowState};
 
 const GAMES: u32 = 100;
 

@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, ValueEnum, error::ErrorKind};
 use connect_k::state::ConnectKState;
+use five_in_row::{player::human_five_in_row, state::FiveInRowState};
 use general_minimax::{
     game::play_multiple,
     player::{
@@ -10,7 +11,6 @@ use general_minimax::{
     state::GameState,
 };
 use mancala::state::MancalaState;
-use mega_tictactoe::{player::human_five_in_row, state::FiveInRowState};
 
 #[derive(Parser)]
 pub struct CLI {
@@ -41,7 +41,7 @@ impl CLI {
             GameKind::Mancala => self.play::<MancalaState>(mancala::eval, mancala::human),
             GameKind::Connect4 => self.play::<ConnectKState<7, 6>>(stupid_eval, human),
             GameKind::FiveInRow => {
-                self.play::<FiveInRowState>(mega_tictactoe::eval, human_five_in_row)
+                self.play::<FiveInRowState>(five_in_row::eval, human_five_in_row)
             }
         }
     }

@@ -1,10 +1,11 @@
 //! Plays two evaluations against each other from seeded random openings, each opening once from
 //! either side, and prints the first one's score.
 //!
-//! `cargo run --release -p mega_tictactoe --example tournament -- <a> <b> <openings> <depth | ms>ms`
+//! `cargo run --release -p five_in_row --example tournament -- <a> <b> <openings> <depth | ms>ms`
 
 use std::{sync::Arc, time::Duration};
 
+use five_in_row::state::FiveInRowState;
 use general_minimax::{
     player::{
         evals::{Score, stupid_eval},
@@ -14,7 +15,6 @@ use general_minimax::{
     state::GameState,
     utils::position,
 };
-use mega_tictactoe::state::FiveInRowState;
 use rayon::prelude::*;
 
 type S = FiveInRowState;
@@ -32,7 +32,7 @@ const MAX_PLIES: usize = 120;
 fn contestant(name: &str) -> Eval {
     match name {
         "stupid" => Arc::new(stupid_eval),
-        "eval" => Arc::new(mega_tictactoe::eval),
+        "eval" => Arc::new(five_in_row::eval),
         "sym" => contestant("w:1,10,100,1000/1,10,100,1000"),
         _ => {
             let weights = |list: &str| -> [Score; 4] {

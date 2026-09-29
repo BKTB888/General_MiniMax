@@ -11,5 +11,5 @@ path = "src/main.rs"
 general_minimax.workspace = true
 connect_k.workspace = true
 mancala.workspace = true
-mega_tictactoe.workspace = true
+five_in_row.workspace = true
 clap.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "mega_tictactoe"
+name = "five_in_row"
 version.workspace = true
 edition.workspace = true
 

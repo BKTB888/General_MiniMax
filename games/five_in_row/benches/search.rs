@@ -1,9 +1,9 @@
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
+use five_in_row::{eval, state::FiveInRowState};
 use general_minimax::{
     player::search::{ABSearch, Search, alphabeta, alphabeta_tt, minimax},
     utils::position,
 };
-use mega_tictactoe::{eval, state::FiveInRowState};
 
 /// One root search at a fixed depth: alphabeta with and without the transposition table, and
 /// minimax, which runs on rayon so its time depends on free cores.

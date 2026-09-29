@@ -2,7 +2,7 @@
 # Profiles benchmarks with samply, looping each for <seconds> without Criterion's statistics.
 # Without a filter, every benchmark in <bench> runs, one after another.
 # Examples: games/profile-bench.sh mancala node_ops
-#           games/profile-bench.sh mega_tictactoe node_ops five_in_row_node_ops/eval
+#           games/profile-bench.sh five_in_row node_ops five_in_row_node_ops/eval
 set -euo pipefail
 
 if [ $# -lt 2 ]; then

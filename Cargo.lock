@@ -82,9 +82,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "connect_k",
+ "five_in_row",
  "general_minimax",
  "mancala",
- "mega_tictactoe",
 ]
 
 [[package]]
@@ -401,6 +401,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef25905e51abafe4dcea6c15fec58c57b601cdbd0ee53d22ea1d3016c587d39b"
 
 [[package]]
+name = "five_in_row"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "criterion",
+ "crossterm",
+ "general_minimax",
+ "rayon",
+ "smallvec",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -548,18 +560,6 @@ dependencies = [
  "criterion",
  "crossterm",
  "general_minimax",
-]
-
-[[package]]
-name = "mega_tictactoe"
-version = "0.1.0"
-dependencies = [
- "colored",
- "criterion",
- "crossterm",
- "general_minimax",
- "rayon",
- "smallvec",
 ]
 
 [[package]]
