@@ -1,25 +1,31 @@
-use std::ops::Range;
+use std::mem::MaybeUninit;
 
 use crate::player::evals::Score;
 
 /// Slots a position can go in. More than 3 kept no more of what searches reuse.
 const SLOTS: usize = 3;
 
+type Bucket<C> = [Option<Slot<C>>; SLOTS];
+
 /// Search results keyed by position hash, with `C` the game's choice type. Positions share
 /// slots, so a store can push out another position's entry.
 pub struct TTable<C> {
-    // Buckets of `SLOTS` neighbouring slots; a new position pushes out the one worth least,
-    // by depth and age. Flat rather than a `Vec` of arrays, which is several times slower to
-    // build for 3 slots.
-    slots: Vec<Option<Slot<C>>>,
+    // A new position pushes out the slot in its bucket worth least, by depth and age. Left
+    // unwritten until the first store into it, since writing them all costs more than a short
+    // search.
+    buckets: Box<[MaybeUninit<Bucket<C>>]>,
+    // One bit per bucket, set once it is written.
+    written: Vec<u64>,
     generation: u32,
 }
 
 impl<C: Copy> TTable<C> {
     /// A table of `1 << bits` entries, rounded down to whole buckets, with `bits` at least 2.
     pub fn new(bits: u8) -> Self {
+        let buckets = (1 << bits) / SLOTS;
         Self {
-            slots: vec![None; (1 << bits) / SLOTS * SLOTS],
+            buckets: Box::new_uninit_slice(buckets),
+            written: vec![0; buckets.div_ceil(64)],
             generation: 0,
         }
     }
@@ -32,7 +38,13 @@ impl<C: Copy> TTable<C> {
 
     /// The entry stored for `hash`, unless another position's store has replaced it since.
     pub fn get(&self, hash: u64) -> Option<TTEntry<C>> {
-        self.slots[self.bucket(hash)]
+        let index = self.bucket(hash);
+        if self.written[index / 64] & 1 << (index % 64) == 0 {
+            return None;
+        }
+        // SAFETY: the bit is set only after the bucket is written.
+        let bucket = unsafe { self.buckets[index].assume_init_ref() };
+        bucket
             .iter()
             .flatten()
             .find(|slot| slot.key == hash)
@@ -54,8 +66,15 @@ impl<C: Copy> TTable<C> {
             best_move,
         };
         let index = self.bucket(hash);
+        let bit = 1 << (index % 64);
+        let bucket = if self.written[index / 64] & bit == 0 {
+            self.written[index / 64] |= bit;
+            self.buckets[index].write([None; SLOTS])
+        } else {
+            // SAFETY: the bit is set only after the bucket is written.
+            unsafe { self.buckets[index].assume_init_mut() }
+        };
         let generation = self.generation;
-        let bucket = &mut self.slots[index];
         let worth = |slot: Option<Slot<C>>| slot.map_or(i32::MIN, |slot| slot.worth(generation));
         let slot = match bucket
             .iter()
@@ -71,12 +90,10 @@ impl<C: Copy> TTable<C> {
         });
     }
 
-    /// The slots of `hash`'s bucket.
-    fn bucket(&self, hash: u64) -> Range<usize> {
+    /// The index of `hash`'s bucket.
+    fn bucket(&self, hash: u64) -> usize {
         // Scales the hash onto the bucket count, which isn't a power of two for a mask.
-        let buckets = (self.slots.len() / SLOTS) as u128;
-        let start = ((hash as u128 * buckets) >> 64) as usize * SLOTS;
-        start..start + SLOTS
+        ((hash as u128 * self.buckets.len() as u128) >> 64) as usize
     }
 }
 
