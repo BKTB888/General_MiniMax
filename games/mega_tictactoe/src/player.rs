@@ -9,16 +9,64 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
     use crossterm::{
         cursor::MoveTo,
         event::{
-            self, DisableMouseCapture, EnableMouseCapture, Event, MouseButton, MouseEventKind,
+            self, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind,
         },
         execute,
-        terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size},
+        terminal::enable_raw_mode,
     };
 
     enable_raw_mode().unwrap();
     let mut stdout = std::io::stdout();
     execute!(stdout, EnableMouseCapture).unwrap();
 
+    let (Coordinate(_, min_c), Coordinate(max_r, _)) = state.bounds();
+    let (mut col_offset, mut row_offset, mut message_row) = draw(state);
+
+    let result = loop {
+        match event::read() {
+            Ok(Event::Mouse(m)) if m.kind == MouseEventKind::Down(MouseButton::Left) => {
+                let term_col = m.column as i16 - col_offset as i16;
+                let term_row = m.row as i16 - row_offset as i16;
+
+                let board_col = term_col + (min_c - BORDER);
+                let board_row = (max_r + BORDER) - term_row;
+
+                let coord = Coordinate(board_row, board_col);
+
+                if state.is_valid(coord) {
+                    break coord;
+                }
+                execute!(stdout, MoveTo(col_offset, message_row)).unwrap();
+                print!("Invalid move at {coord:?}, try again\r");
+                let _ = std::io::Write::flush(&mut stdout);
+            }
+            // Changing the font size resizes the grid, so the board has to be centred again.
+            Ok(Event::Resize(..)) => (col_offset, row_offset, message_row) = draw(state),
+            // Raw mode turns Ctrl-C into a key press instead of a SIGINT.
+            Ok(Event::Key(k))
+                if k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                restore();
+                std::process::exit(130);
+            }
+            _ => {}
+        }
+    };
+
+    restore();
+    result
+}
+
+/// Clears the terminal and draws `state` centred with a prompt below it. Returns the board's
+/// column and row offset, and the row free for messages.
+fn draw(state: &FiveInRowState) -> (u16, u16, u16) {
+    use crossterm::{
+        cursor::MoveTo,
+        execute,
+        terminal::{Clear, ClearType, size},
+    };
+
+    let mut stdout = std::io::stdout();
     let (Coordinate(min_r, min_c), Coordinate(max_r, max_c)) = state.bounds();
 
     let (term_width, term_height) = size().unwrap_or((80, 24));
@@ -33,35 +81,18 @@ pub fn human_five_in_row(state: &FiveInRowState) -> MapCoord {
         execute!(stdout, MoveTo(col_offset, row_offset + i as u16)).unwrap();
         print!("{line}");
     }
-    let _ = std::io::Write::flush(&mut stdout);
 
     execute!(stdout, MoveTo(col_offset, row_offset + board_height + 1)).unwrap();
     print!("Click a cell:");
     let _ = std::io::Write::flush(&mut stdout);
 
-    let result = loop {
-        if let Ok(Event::Mouse(m)) = event::read()
-            && m.kind == MouseEventKind::Down(MouseButton::Left)
-        {
-            let term_col = m.column as i16 - col_offset as i16;
-            let term_row = m.row as i16 - row_offset as i16;
+    (col_offset, row_offset, row_offset + board_height + 2)
+}
 
-            let board_col = term_col + (min_c - BORDER);
-            let board_row = (max_r + BORDER) - term_row;
+/// Undoes the raw mode and mouse capture `human_five_in_row` turns on.
+fn restore() {
+    use crossterm::{event::DisableMouseCapture, execute, terminal::disable_raw_mode};
 
-            let coord = Coordinate(board_row, board_col);
-
-            if state.is_valid(coord) {
-                break coord;
-            } else {
-                execute!(stdout, MoveTo(col_offset, row_offset + board_height + 2)).unwrap();
-                print!("Invalid move at {coord:?}, try again\r");
-                let _ = std::io::Write::flush(&mut stdout);
-            }
-        }
-    };
-
-    execute!(stdout, DisableMouseCapture).unwrap();
+    execute!(std::io::stdout(), DisableMouseCapture).unwrap();
     disable_raw_mode().unwrap();
-    result
 }
