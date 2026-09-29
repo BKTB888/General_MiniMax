@@ -196,6 +196,11 @@ pub fn alphabeta<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
 /// Alpha-beta with a transposition table of `1 << S::TT_BITS` entries, kept across every
 /// search the returned closure runs.
 pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> {
+    alphabeta_tt_sized(eval, S::TT_BITS)
+}
+
+/// `alphabeta_tt` with a table of `1 << bits` entries instead, with `bits` at least 2.
+pub fn alphabeta_tt_sized<S: GameState>(eval: impl Evaluation<S>, bits: u8) -> impl ABSearch<S> {
     struct SearchState<S: GameState, E> {
         eval: E,
         table: TTable<S::Choice>,
@@ -270,7 +275,7 @@ pub fn alphabeta_tt<S: GameState>(eval: impl Evaluation<S>) -> impl ABSearch<S> 
     // The search is `Fn`, so storing into the table needs a `RefCell`.
     let search = RefCell::new(SearchState {
         eval,
-        table: TTable::new(S::TT_BITS),
+        table: TTable::new(bits),
     });
     move |state, depth, alpha, beta, deadline| {
         let mut search = search.borrow_mut();

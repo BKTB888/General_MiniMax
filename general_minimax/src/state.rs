@@ -7,9 +7,8 @@ pub trait GameState: Default + Display + Clone + Send + Sync {
     /// Owned, so the state can change while its moves are being iterated.
     type Moves: IntoIterator<Item = Self::Choice> + DerefMut<Target = [Self::Choice]>;
     const NUM_P: u8;
-    /// The transposition table holds about `1 << TT_BITS` entries, with `TT_BITS` at least 2,
-    /// and is built anew for every search player, so a bigger one costs time before the first
-    /// move.
+    /// The default transposition table holds about `1 << TT_BITS` entries, with `TT_BITS` at
+    /// least 2. Each search player has its own, and `alphabeta_tt_sized` picks another size.
     const TT_BITS: u8;
     fn make_move(&mut self, choice: Self::Choice);
     fn get_result(&self) -> Option<GameResult>;
