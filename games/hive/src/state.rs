@@ -357,36 +357,35 @@ impl<const MOSQUITO: bool, const LADYBUG: bool, const PILLBUG: bool>
         // Articulation points, found in one DFS: https://cp-algorithms.com/graph/cutpoints.html
         struct Search<'a, const M: bool, const L: bool, const P: bool> {
             state: &'a HiveState<M, L, P>,
-            visited: HexSet,
             cuts: HexSet,
-            /// The order each hex was visited in, from 1.
+            /// The order each hex was visited in, from 1, or 0 while unvisited.
             num: [u8; GRID_SIZE],
-            /// The lowest `num` reachable by DFS edges and then at most one back edge.
-            low: [u8; GRID_SIZE],
             visit_num: u8,
         }
 
+        /// The lowest `num` reachable from `hex` by DFS edges and then at most one back edge.
         fn dfs<const M: bool, const L: bool, const P: bool>(
             search: &mut Search<M, L, P>,
             hex: Hex,
             parent: Hex,
-        ) {
-            search.visited.set(hex);
-            search.num[hex as usize] = search.visit_num;
-            search.low[hex as usize] = search.visit_num;
+        ) -> u8 {
+            let num = search.visit_num;
+            search.num[hex as usize] = num;
             search.visit_num += 1;
+            let mut low = num;
             let root = hex == parent;
             let mut children = 0;
             for adj in adjacent(hex) {
                 if !search.state.occupied(adj) || adj == parent {
                     continue;
                 }
-                if search.visited.get(adj) {
-                    search.low[hex as usize] = search.low[hex as usize].min(search.num[adj as usize]);
+                let adj_num = search.num[adj as usize];
+                if adj_num != 0 {
+                    low = low.min(adj_num);
                 } else {
-                    dfs(search, adj, hex);
-                    search.low[hex as usize] = search.low[hex as usize].min(search.low[adj as usize]);
-                    if search.low[adj as usize] >= search.num[hex as usize] && !root {
+                    let adj_low = dfs(search, adj, hex);
+                    low = low.min(adj_low);
+                    if adj_low >= num && !root {
                         search.cuts.set(hex);
                     }
                     children += 1;
@@ -395,14 +394,13 @@ impl<const MOSQUITO: bool, const LADYBUG: bool, const PILLBUG: bool>
             if root && children > 1 {
                 search.cuts.set(hex);
             }
+            low
         }
 
         let mut search = Search {
             state: self,
-            visited: HexSet::new(),
             cuts: HexSet::new(),
             num: [0; GRID_SIZE],
-            low: [0; GRID_SIZE],
             visit_num: 1,
         };
         dfs(&mut search, start, start);
