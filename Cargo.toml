@@ -7,6 +7,7 @@ members = [
     "games/five_in_row",
     "games/infinite_connect4",
     "app", "games/gomoku",
+    "games/hive",
 ]
 
 [workspace.package]
@@ -19,6 +20,7 @@ connect_k = { path = "games/connect_k" }
 mancala = { path = "games/mancala" }
 five_in_row = { path = "games/five_in_row" }
 infinite_connect4 = { path = "games/infinite_connect4" }
+hive = { path = "games/hive" }
 
 arrayvec = "0.7"
 colored = "3"
@@ -28,6 +30,12 @@ rayon = "1"
 clap = { version = "4", features = ["derive"] }
 criterion = "0.8"
 smallvec = "1"
+
+# Lets small helpers inline across crates and codegen units: Hive's perft is 11% faster with
+# both, and neither alone gets most of that.
+[profile.release]
+lto = "fat"
+codegen-units = 1
 
 # Release speed with debug symbols, so profilers like samply show function names.
 [profile.profiling]

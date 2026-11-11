@@ -12,4 +12,5 @@ general_minimax.workspace = true
 connect_k.workspace = true
 mancala.workspace = true
 five_in_row.workspace = true
+hive.workspace = true
 clap.workspace = true

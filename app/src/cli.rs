@@ -1,6 +1,7 @@
 use clap::{CommandFactory, Parser, ValueEnum, error::ErrorKind};
 use connect_k::state::ConnectKState;
 use five_in_row::{player::human_five_in_row, state::FiveInRowState};
+use hive::state::HiveState;
 use general_minimax::{
     game::play_multiple,
     player::{
@@ -43,6 +44,8 @@ impl CLI {
             GameKind::FiveInRow => {
                 self.play::<FiveInRowState>(five_in_row::eval, human_five_in_row)
             }
+            GameKind::Hive => self.play::<HiveState<true, true, true>>(hive::eval, hive::human),
+            GameKind::HiveCore => self.play::<HiveState<false, false, false>>(hive::eval, hive::human),
         }
     }
 
@@ -81,4 +84,8 @@ pub enum GameKind {
     Mancala,
     Connect4,
     FiveInRow,
+    /// With the mosquito, ladybug and pillbug.
+    Hive,
+    /// The base pieces only.
+    HiveCore,
 }
