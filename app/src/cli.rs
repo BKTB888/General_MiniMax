@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser, ValueEnum, error::ErrorKind};
+use clap::{CommandFactory, Parser, error::ErrorKind};
 use connect_k::state::ConnectKState;
 use five_in_row::{player::human_five_in_row, state::FiveInRowState};
 use hive::state::HiveState;
@@ -12,9 +12,12 @@ use general_minimax::{
     state::GameState,
 };
 use mancala::state::MancalaState;
+use std::str::FromStr;
 
 #[derive(Parser)]
 pub struct CLI {
+    /// mancala, connect4, five-in-row or hive. Add hive expansions as letters in any order:
+    /// hive-m (mosquito), hive-lp (ladybug, pillbug), hive-mlp...
     game: GameKind,
     /// human, randy[:<seed>], minimax:<depth>, alphabeta:<depth>, alphabeta-tt:<depth>, iterative:<ms per move> or iterative-tt:<ms per move>
     #[arg(long, default_value = "human")]
@@ -34,6 +37,27 @@ pub struct CLI {
     print_result: Option<bool>,
 }
 
+/// Plays the `HiveState` whose const generics are the given bools, in order:
+/// `play_hive!(self, mosquito, ladybug, pillbug)`.
+macro_rules! play_hive {
+    ($self:ident, [$($c:literal),*], []) => {
+        $self.play::<HiveState<$($c),*>>(hive::eval, hive::human)
+    };
+    // Const generics can't come from a runtime bool, so branch on it and move it to the
+    // settled list as a literal.
+    ($self:ident, [$($c:literal),*], [$b:expr $(, $rest:expr)*]) => {
+        if $b {
+            play_hive!($self, [$($c,)* true], [$($rest),*])
+        } else {
+            play_hive!($self, [$($c,)* false], [$($rest),*])
+        }
+    };
+    // Last, because the recursive calls' lists are array expressions and would match it too.
+    ($self:ident, $($b:expr),+) => {
+        play_hive!($self, [], [$($b),+])
+    };
+}
+
 impl CLI {
     /// Plays the chosen game with the chosen players.
     pub fn run(&self) {
@@ -44,8 +68,9 @@ impl CLI {
             GameKind::FiveInRow => {
                 self.play::<FiveInRowState>(five_in_row::eval, human_five_in_row)
             }
-            GameKind::Hive => self.play::<HiveState<true, true, true>>(hive::eval, hive::human),
-            GameKind::HiveCore => self.play::<HiveState<false, false, false>>(hive::eval, hive::human),
+            GameKind::Hive { mosquito, ladybug, pillbug } => {
+                play_hive!(self, mosquito, ladybug, pillbug)
+            }
         }
     }
 
@@ -79,13 +104,53 @@ impl CLI {
     }
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy)]
 pub enum GameKind {
     Mancala,
     Connect4,
     FiveInRow,
-    /// With the mosquito, ladybug and pillbug.
-    Hive,
-    /// The base pieces only.
-    HiveCore,
+    /// The base pieces, plus each expansion piece that is true.
+    Hive {
+        mosquito: bool,
+        ladybug: bool,
+        pillbug: bool,
+    },
+}
+
+impl GameKind {
+    /// Hive with the expansions named by `letters`: any of `m`, `l`, `p`, each at most once.
+    fn hive(letters: &str) -> Result<Self, String> {
+        let (mut mosquito, mut ladybug, mut pillbug) = (false, false, false);
+        for letter in letters.chars() {
+            let expansion = match letter {
+                'm' => &mut mosquito,
+                'l' => &mut ladybug,
+                'p' => &mut pillbug,
+                _ => return Err(format!("unknown hive expansion `{letter}`, expected m, l or p")),
+            };
+            if *expansion {
+                return Err(format!("hive expansion `{letter}` given twice"));
+            }
+            *expansion = true;
+        }
+        Ok(GameKind::Hive { mosquito, ladybug, pillbug })
+    }
+}
+
+impl FromStr for GameKind {
+    type Err = String;
+
+    /// `mancala`, `connect4`, `five-in-row`, or `hive` followed by `-` and any of `m`, `l`, `p`.
+    fn from_str(name: &str) -> Result<Self, String> {
+        Ok(match name {
+            "mancala" => GameKind::Mancala,
+            "connect4" => GameKind::Connect4,
+            "five-in-row" => GameKind::FiveInRow,
+            "hive" => GameKind::hive("")?,
+            _ => match name.strip_prefix("hive-") {
+                Some(letters) if !letters.is_empty() => GameKind::hive(letters)?,
+                _ => return Err(format!("unknown game `{name}`")),
+            },
+        })
+    }
 }
