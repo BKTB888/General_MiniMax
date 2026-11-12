@@ -375,8 +375,8 @@ impl<const MOSQUITO: bool, const LADYBUG: bool, const PILLBUG: bool>
             let mut low = num;
             let root = hex == parent;
             let mut children = 0;
-            for adj in adjacent(hex) {
-                if !search.state.occupied(adj) || adj == parent {
+            for adj in search.state.occupied_adjacent(hex) {
+                if adj == parent {
                     continue;
                 }
                 let adj_num = search.num[adj as usize];
@@ -405,6 +405,20 @@ impl<const MOSQUITO: bool, const LADYBUG: bool, const PILLBUG: bool>
         };
         dfs(&mut search, start, start);
         search.cuts
+    }
+
+    /// The occupied neighbors of `hex`, in `adjacent` order.
+    fn occupied_adjacent(&self, hex: Hex) -> impl Iterator<Item = Hex> {
+        let neighbors = adjacent(hex);
+        let mut occupied = self.neighbors[hex as usize];
+        std::iter::from_fn(move || {
+            if occupied == 0 {
+                return None;
+            }
+            let i = occupied.trailing_zeros() as usize;
+            occupied &= occupied - 1;
+            Some(neighbors[i])
+        })
     }
 
     /// A bit per neighbor of `hex`, in `adjacent` order, set when it's occupied and isn't
@@ -587,11 +601,8 @@ impl<const MOSQUITO: bool, const LADYBUG: bool, const PILLBUG: bool>
     /// The moves of each bug next to a mosquito on the ground.
     fn generate_mosquito(&self, hex: Hex, turns: &mut Turns) {
         let mut targets = [false; 8];
-        for adj in adjacent(hex) {
-            let node = self.node(adj);
-            if node.occupied() {
-                targets[node.bug() as usize] = true;
-            }
+        for adj in self.occupied_adjacent(hex) {
+            targets[self.node(adj).bug() as usize] = true;
         }
 
         let first = turns.len();

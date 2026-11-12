@@ -58,10 +58,7 @@ impl BasicEvaluator {
                 if node.is_stacked() {
                     bug_score = self.value(Bug::Beetle);
                 } else {
-                    for adj in adjacent(hex) {
-                        if !board.occupied(adj) {
-                            continue;
-                        }
+                    for adj in board.occupied_adjacent(hex) {
                         let bug = board.node(adj).bug();
                         if bug != Bug::Queen {
                             bug_score = self.value(bug);
