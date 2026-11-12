@@ -3,7 +3,7 @@
     gca_min_const_items,
     gca_macroless_args
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 use connect_k::state::ConnectKState;
 use criterion::{Criterion, criterion_group, criterion_main};

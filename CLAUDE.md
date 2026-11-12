@@ -1,9 +1,8 @@
 # General MiniMax
 
 Game-tree search in Rust. `general_minimax` is the library: minimax, alpha-beta with and
-without a transposition table, players and the play loop. Each game is a crate under `games/`
-(`connect_k`, `five_in_row`, `gomoku`, `infinite_connect4`, `mancala`), and `app` is the command
-line that plays them.
+without a transposition table, players and the play loop. Each game is a crate under `games/`,
+and `app` is the command line that plays them.
 
 Notes live next to what they describe:
 - `general_minimax/CLAUDE.md`: the transposition table, its aging, and ideas for speeding up

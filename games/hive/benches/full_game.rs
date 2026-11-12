@@ -1,6 +1,6 @@
 // For `play_multiple`'s player array, whose length comes from `NUM_P`.
 #![feature(gca_const_items, gca_min_const_items, gca_macroless_args)]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use general_minimax::{

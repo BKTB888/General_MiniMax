@@ -5,7 +5,7 @@
     generic_const_items,
     const_trait_impl
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 mod evaluation;
 pub(crate) mod map;

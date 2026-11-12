@@ -5,6 +5,6 @@
     const_trait_impl,
     default_field_values
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 pub mod state;

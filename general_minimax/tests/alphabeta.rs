@@ -3,7 +3,7 @@
     gca_min_const_items,
     gca_macroless_args
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 use std::time::Instant;
 

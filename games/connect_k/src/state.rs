@@ -14,6 +14,10 @@ use general_minimax::{
 type Pos = C<isize, isize>;
 
 #[derive(Clone, Default)]
+#[expect(
+    unevaluated_default_field_value,
+    reason = "the defaults are plain arrays, valid at any size"
+)]
 pub struct ConnectKState<const N: u8, const M: u8, const K: u8 = 4, const NUM_P: u8 = 2> {
     cells: [[Option<u8>; AS_USIZE::<N>]; AS_USIZE::<M>] = [[None; AS_USIZE::<N>]; AS_USIZE::<M>],
     player: u8,

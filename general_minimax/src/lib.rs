@@ -6,7 +6,7 @@
     const_trait_impl,
     trait_alias
 )]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 pub mod coordinate;
 pub mod game;
