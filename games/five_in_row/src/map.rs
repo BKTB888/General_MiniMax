@@ -418,7 +418,7 @@ impl Line {
     fn set(&mut self, i: u8, player: u8) -> u128 {
         debug_assert!(i < LINE_LEN && self.get(i).is_none());
         // The masks let the compiler drop the bounds checks.
-        let change = CHANGE[player as usize & 1][self.0.0 as usize & (1 << 2 * LINE_LEN) - 1];
+        let change = CHANGE[player as usize & 1][self.0.0 as usize & ((1 << (2 * LINE_LEN)) - 1)];
         self.0.set(i + LINE_LEN * player);
         change
     }
@@ -441,7 +441,7 @@ impl Line {
 
 /// `Line::set`'s result, by player and then by the line before. Only the number of stones each
 /// player has decides a line's count, so which cell is set makes no difference.
-const CHANGE: [[u128; 1 << (2 * LINE_LEN)]; 2] = {
+static CHANGE: [[u128; 1 << (2 * LINE_LEN)]; 2] = {
     /// A 1 in the count for lines holding `ours` stones of player 0 and `theirs` of player 1,
     /// or 0 if no count holds them: they are empty, both players', or five.
     const fn count(ours: u32, theirs: u32) -> u128 {

@@ -139,7 +139,6 @@ impl Display for MancalaState {
                 3 | 10 => value.blue().bold(),
                 _ => value.black(),
             })
-            .map(|colored| write!(f, "{colored}"))
-            .collect::<fmt::Result>()
+            .try_for_each(|colored| write!(f, "{colored}"))
     }
 }

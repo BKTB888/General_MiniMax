@@ -38,8 +38,8 @@ impl<const N: u8, const M: u8, const K: u8, const NUM_P: u8> Display
 
         for row in (0..N as usize).rev() {
             write!(f, "│")?;
-            for col in 0..M as usize {
-                match self.cells[col][row] {
+            for column in &self.cells {
+                match column[row] {
                     Some(player) => {
                         let disc = " ● ".color(get_player_color(player));
                         write!(f, "{disc}│")?;

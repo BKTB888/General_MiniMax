@@ -15,7 +15,7 @@ use mancala::state::MancalaState;
 use std::str::FromStr;
 
 #[derive(Parser)]
-pub struct CLI {
+pub struct Cli {
     /// mancala, connect4, five-in-row or hive. Add hive expansions as letters in any order:
     /// hive-m (mosquito), hive-lp (ladybug, pillbug), hive-mlp...
     game: GameKind,
@@ -58,7 +58,7 @@ macro_rules! play_hive {
     };
 }
 
-impl CLI {
+impl Cli {
     /// Plays the chosen game with the chosen players.
     pub fn run(&self) {
         // Const generics are fixed at compile time, so each game maps to one concrete type.
@@ -83,7 +83,7 @@ impl CLI {
         let kinds = [self.p1, self.p2];
         let human_plays = kinds.iter().any(|kind| matches!(kind, PlayerKind::Human));
         if self.parallel && human_plays {
-            CLI::command()
+            Cli::command()
                 .error(
                     ErrorKind::ArgumentConflict,
                     "--parallel can't be used with a human player",

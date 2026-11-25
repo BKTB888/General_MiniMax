@@ -8,8 +8,8 @@
 mod cli;
 
 use clap::Parser;
-use cli::CLI;
+use cli::Cli;
 
 fn main() {
-    CLI::parse().run();
+    Cli::parse().run();
 }

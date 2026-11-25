@@ -152,6 +152,13 @@ impl Display for FiveInRowState {
     }
 }
 
+const fn zobrist_cell_key(coord: MapCoord, player: u8) -> u64 {
+    // `as u16` keeps negatives to their own 16 bits instead of sign-extending over the others.
+    let idx = (coord.0 as u16 as u64) << 32 | (coord.1 as u16 as u64) << 16 | player as u64;
+    // Splitmix, not xorshift: a linear mixer lets keys XOR-cancel across cells.
+    idx.splitmix()
+}
+
 #[cfg(test)]
 mod tests {
     use general_minimax::coordinate::Coordinate as C;
@@ -310,11 +317,4 @@ mod tests {
         s.undo();
         assert_states_eq(&s, &original);
     }
-}
-
-const fn zobrist_cell_key(coord: MapCoord, player: u8) -> u64 {
-    // `as u16` keeps negatives to their own 16 bits instead of sign-extending over the others.
-    let idx = (coord.0 as u16 as u64) << 32 | (coord.1 as u16 as u64) << 16 | player as u64;
-    // Splitmix, not xorshift: a linear mixer lets keys XOR-cancel across cells.
-    idx.splitmix()
 }
