@@ -2,3 +2,5 @@
 /.idea
 # samply output
 profile.json.gz
+/szakdolgozat
+.DS_Store
